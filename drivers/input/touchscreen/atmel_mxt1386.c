@@ -137,7 +137,8 @@
 
 
 #if 1/*for debugging, enable DEBUG_TRACE*/
-static int debug = DEBUG_INFO;
+/*static int debug = DEBUG_INFO;*/
+static int debug = DEBUG_TRACE;
 #else
 static int debug = DEBUG_TRACE;  /* for debugging*/
 #endif
