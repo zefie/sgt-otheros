@@ -1,0 +1,23 @@
+#!/bin/sh
+
+rm -f /home/zefie/sgt/buildboot/zImage
+cp arch/arm/boot/zImage /home/zefie/sgt/buildboot/zImage
+
+rm -rf /home/zefie/sgt/buildboot/mod/
+
+cd /home/zefie/sgt/sgt-otheros && arm-kernel-env make modules_install 
+cd /home/zefie/sgt/sgt-otheros && arm-kernel-env make headers_install 
+
+mkdir /home/zefie/sgt/buildboot/mod/usr/
+cp -r usr/include /home/zefie/sgt/buildboot/mod/usr/
+
+mkdir -p /home/zefie/sgt/buildboot/mod/usr/local/sbin
+
+cp sgt-otheros-extras/scripts/sec_jack_alsa_event /home/zefie/sgt/buildboot/mod/usr/local/sbin
+chmod 755 /home/zefie/sgt/buildboot/mod/usr/local/sbin/sec_jack_alsa_event
+
+cp sgt-otheros-extras/scripts/wm8994_codec_helper /home/zefie/sgt/buildboot/mod/usr/local/sbin
+chmod 755 /home/zefie/sgt/buildboot/mod/usr/local/sbin/wm8994_codec_helper
+
+
+

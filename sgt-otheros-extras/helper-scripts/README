@@ -1,0 +1,4 @@
+These are the scripts referenced in the kernel drivers.
+
+drivers/misc/sec_jack.c -> /usr/local/sbin/sec_jack_alsa_event -> sec_jack_alsa_event
+sound/soc/codec/wm8994_samsung.c -> -> /usr/local/sbin/wm8994_codec_helper -> wm8994_codec_helper

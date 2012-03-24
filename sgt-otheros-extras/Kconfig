@@ -1,0 +1,15 @@
+menuconfig SGT_OTHEROS
+	bool "SGT-OtherOS Extras"
+	depends on MACH_SAMSUNG_P4WIFI || _MACH_SAMSUNG_P4
+	default y
+	---help---
+	  SGT-OtherOS Extras provided by zefie
+
+	  If in doubt, say Y here.
+
+
+if SGT_OTHEROS
+
+source "sgt-otheros-extras/compcache-0.6.2/Kconfig"
+
+endif # SGT_OTHEROS

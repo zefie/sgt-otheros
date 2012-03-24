@@ -1,0 +1,32 @@
+#!/bin/busybox ash
+
+if [ -f /var/run/audio_status ]; then
+	ASTAT=$(cat /var/run/audio_status)
+else
+	ASTAT="0"
+fi
+
+if [ "$ASTAT" == "0" ]; then
+	# // Speaker
+	echo " * Audio Output set to Speaker"
+	amixer sset 'Playback Path' 'SPK'
+	amixer sset 'Jack Function' 'Off'
+	amixer sset 'Capture MIC Path' 'Main Mic'
+fi
+
+if [ "$ASTAT" == "1" ]; then
+	# // Headset with Mic
+	echo " * Audio Output set to Headset"
+	amixer sset 'Playback Path' 'HP'
+	amixer sset 'Jack Function' 'Headset'
+	amixer sset 'Capture MIC Path' 'Hands Free Mic'
+fi
+
+if [ "$ASTAT" == "2" ]; then
+	# // Headset without Mic
+	echo " * Audio Output set to Headphones"
+	amixer sset 'Playback Path' 'HP'
+	amixer sset 'Jack Function' 'Headphone'
+	amixer sset 'Capture MIC Path' 'Main Mic'
+fi
+

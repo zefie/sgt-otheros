@@ -1,0 +1,6 @@
+#!/bin/sh
+cp .config config
+arm-kernel-env make mrproper
+cp config .config
+
+

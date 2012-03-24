@@ -1,0 +1,26 @@
+#!/bin/busybox ash
+if [ "$1" == "0" ]; then
+	# // Speaker
+	echo " * Audio Output set to Speaker"
+	amixer sset 'Playback Path' 'SPK'
+	amixer sset 'Jack Function' 'Off'
+	amixer sset 'Capture MIC Path' 'Main Mic'
+fi
+
+if [ "$1" == "1" ]; then
+	# // Headset with Mic
+	echo " * Audio Output set to Headset"
+	amixer sset 'Playback Path' 'HP'
+	amixer sset 'Jack Function' 'Headset'
+	amixer sset 'Capture MIC Path' 'Hands Free Mic'
+fi
+
+if [ "$1" == "2" ]; then
+	# // Headset without Mic
+	echo " * Audio Output set to Headphones"
+	amixer sset 'Playback Path' 'HP'
+	amixer sset 'Jack Function' 'Headphone'
+	amixer sset 'Capture MIC Path' 'Main Mic'
+fi
+
+echo $1 > /var/run/audio_status
