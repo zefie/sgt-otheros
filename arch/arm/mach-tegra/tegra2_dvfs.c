@@ -57,7 +57,7 @@ static const int cpu_speedo_nominal_millivolts[] =
 static const int core_speedo_nominal_millivolts[] =
 /* spedo_id  0,    1,    2 */
 #if defined(CONFIG_TEGRA_OVERCLOCK)
-	{ 1225, 1300, 1300 };
+	{ 1225, 1275, 1300 };
 #else
 	{ 1225, 1225, 1300 };
 #endif
@@ -77,29 +77,17 @@ static struct dvfs_rail tegra2_dvfs_rail_vdd_cpu = {
 
 static struct dvfs_rail tegra2_dvfs_rail_vdd_core = {
 	.reg_id = "vdd_core",
-#if defined(CONFIG_TEGRA_OVERCLOCK)
 	.max_millivolts = 1300,
 	.min_millivolts = 950,
 	.nominal_millivolts = 1225,
-#else
-	.max_millivolts = 1300,
-	.min_millivolts = 950,
-	.nominal_millivolts = 1225,
-#endif
 	.step = 150, /* step vdd_core by 150 mV to allow vdd_aon to follow */
 };
 
 static struct dvfs_rail tegra2_dvfs_rail_vdd_aon = {
 	.reg_id = "vdd_aon",
-#if defined(CONFIG_TEGRA_OVERCLOCK)
 	.max_millivolts = 1300,
 	.min_millivolts = 950,
 	.nominal_millivolts = 1225,
-#else
-	.max_millivolts = 1300,
-	.min_millivolts = 950,
-	.nominal_millivolts = 1225,
-#endif
 #ifndef CONFIG_TEGRA_CORE_DVFS
 	.disabled = true,
 #endif
@@ -205,8 +193,11 @@ static struct dvfs dvfs_init[] = {
 	CPU_DVFS("cpu", 2, 3, MHZ,   0,   0,   0,   0, 940, 1000, 1000, 1000, 1130, 1130, 1200),
 
 	/* Core voltages (mV):           950,    1000,   1100,   1200,   1225,   1275,   1300 */
+#ifdef CONFIG_MACH_SAMSUNG_P5
+	CORE_DVFS("emc",	 -1, 1, KHZ, 25000,  50000, 50000, 300000, 666000, 666000, 760000),
+#else
 	CORE_DVFS("emc",     -1, 1, KHZ, 57000,  333000, 380000, 666000, 666000, 666000, 760000),
-
+#endif
 
 #if 0
 	/*

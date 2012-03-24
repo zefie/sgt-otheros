@@ -97,6 +97,10 @@
 #include <linux/sec_keyboard_struct.h>
 #endif
 
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+#include <linux/usb/f_accessory.h>
+#endif
+
 struct class *sec_class;
 EXPORT_SYMBOL(sec_class);
 
@@ -154,6 +158,9 @@ struct bootloader_message {
 static struct clk *wifi_32k_clk;
 static struct mxt_callbacks *charger_callbacks;
 
+/* to indicate REBOOT_MODE_RECOVERY */
+extern int reboot_mode;
+
 /*Check ADC value to select headset type*/
 extern s16 adc_get_value(u8 channel);
 extern s16 stmpe811_adc_get_value(u8 channel);
@@ -191,6 +198,7 @@ static int write_bootloader_message(char *cmd, int mode)
 	if (mode == REBOOT_MODE_RECOVERY) {
 		strcpy(bootmsg.command, "boot-recovery");
 #ifdef CONFIG_KERNEL_DEBUG_SEC
+		reboot_mode = REBOOT_MODE_RECOVERY;
 		kernel_sec_set_debug_level(KERNEL_SEC_DEBUG_LEVEL_LOW);
 #endif
 	}
@@ -242,11 +250,11 @@ static int write_bootloader_message(char *cmd, int mode)
 static void write_bootloader_mode(char boot_mode)
 {
 	void __iomem *to_io;
-#if 0
+//#if 0
 	to_io = ioremap(BOOT_MODE_P_ADDR, 4);
 	writel((unsigned long)boot_mode, to_io);
 	iounmap(to_io);
-#endif
+//#endif
 	/* Write a magic value to a 2nd memory location to distinguish between a
 	 * cold boot and a reboot.
 	 */
@@ -447,6 +455,7 @@ static __initdata struct tegra_clk_init_table p3_clk_init_table[] = {
 	{ "pll_c",	"clk_m",	586000000,	true},
 	{ "pll_a",	NULL,		11289600,	true},
 	{ "pll_a_out0",	NULL,		11289600,	true},
+	{ "clk_dev1",   "pll_a_out0",   0,              true},
 	{ "i2s1",	"pll_a_out0",	11289600,	true},
 	{ "i2s2",	"pll_a_out0",	11289600,	true},
 	{ "audio",	"pll_a_out0",	11289600,	true},
@@ -557,7 +566,7 @@ static char *usb_functions_ums_acm_adb[] = {
 	"adb",
 };
 static char *usb_functions_diag_adb[] = {
-//	"mtp",
+	"mtp",
 	"diag",
 	"adb",
 };
@@ -582,12 +591,25 @@ static char *usb_functions_acm_ums_adb[] = {
 static char *usb_functions_mtp[] = {
 	"mtp",
 };
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+/* accessory mode */
+static char *usb_functions_accessory[] = {
+	"accessory",
+};
+static char *usb_functions_accessory_adb[] = {
+	"accessory",
+	"adb",
+};
+#endif
 static char *usb_functions_all[] = {
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 /* soonyong.cho : Every function driver for samsung composite.
  *  		  Number of to enable function features have to be same as below.
  */
 #  ifdef CONFIG_USB_ANDROID_SAMSUNG_ESCAPE /* USE DEVGURU HOST DRIVER */
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+	"accessory",
+#endif	
 	//"usb_mass_storage",
 	//"acm",
 #    ifndef CONFIG_USB_ANDROID_SAMSUNG_KIES_UMS
@@ -690,6 +712,8 @@ static struct android_usb_product usb_products[] = {
 		.bDeviceProtocol= 0x01,
 		.s		= ANDROID_P4LTE_KIES_CONFIG_STRING,
 		.mode		= USBSTATUS_SAMSUNG_KIES,
+		.multi_conf_functions[0] = usb_functions_mtp,
+		.multi_conf_functions[1] = usb_functions_mtp_diag,
 	},
 	{
 		.product_id	= SAMSUNG_UMS_PRODUCT_ID,
@@ -701,6 +725,30 @@ static struct android_usb_product usb_products[] = {
 		.s		= ANDROID_UMS_CONFIG_STRING,
 		.mode		= USBSTATUS_UMS,
 	},
+#ifdef CONFIG_USB_ANDROID_ACCESSORY	
+	{
+		.vendor_id	= USB_ACCESSORY_VENDOR_ID,
+		.product_id	= USB_ACCESSORY_PRODUCT_ID,
+		.num_functions	= ARRAY_SIZE(usb_functions_accessory),
+		.functions	= usb_functions_accessory,
+		.bDeviceClass	= USB_CLASS_PER_INTERFACE,
+		.bDeviceSubClass= 0,
+		.bDeviceProtocol= 0,
+		.s		= ANDROID_ACCESSORY_CONFIG_STRING,
+		.mode		= USBSTATUS_ACCESSORY,
+	},	
+	{
+		.vendor_id	= USB_ACCESSORY_VENDOR_ID,
+		.product_id	= USB_ACCESSORY_PRODUCT_ID,
+		.num_functions	= ARRAY_SIZE(usb_functions_accessory_adb),
+		.functions	= usb_functions_accessory_adb,
+		.bDeviceClass	= USB_CLASS_PER_INTERFACE,
+		.bDeviceSubClass= 0,
+		.bDeviceProtocol= 0,
+		.s		= ANDROID_ACCESSORY_ADB_CONFIG_STRING,
+		.mode		= USBSTATUS_ACCESSORY,
+	},		
+#endif			
 	{
 		.product_id	= SAMSUNG_P4LTE_RNDIS_DIAG_PRODUCT_ID,
 		.num_functions	= ARRAY_SIZE(usb_functions_rndis_diag),
@@ -944,7 +992,7 @@ static const struct tegra_pingroup_config i2c2_gen2 = {
 static struct tegra_i2c_platform_data p3_i2c2_platform_data = {
 	.adapter_nr	= 1,
 	.bus_count	= 2,
-	.bus_clk_rate	= { 400000, 10000 },
+	.bus_clk_rate	= { 100000, 10000 },
 	.bus_mux	= { &i2c2_ddc, &i2c2_gen2 },
 	.bus_mux_len	= { 1, 1 },
 };
@@ -1196,7 +1244,7 @@ static void tegra_usb_ldo_en(int active, int instance)
 			if (ret == 0)
 				usb_data.usb_regulator_on[instance] = 1;
 			else
-				pr_err("%s: failed to turn on \\
+				pr_err("%s: failed to turn on \
 					vdd_ldo6 regulator\n", __func__);
 		}
 	} else {
@@ -1222,36 +1270,54 @@ static void tegra_otg_en(int active)
 void tegra_acc_power(u8 token, bool active)
 {
 	int gpio_acc_en;
+	int gpio_acc_5v;
+	int try_cnt = 0;
 	static bool enable = false;
 	static u8 acc_en_token = 0;
 
-#if 0
-	enum {
-		ACC_EN_TOKEN_1 = 0, /* keyboard */
-		ACC_EN_TOKEN_2,   	/* usb otg */
-		...
-		DVFS_LOCK_TOKEN_NUM
-	};
-#endif
 	gpio_acc_en = GPIO_ACCESSORY_EN;
+
+	if(system_rev > 0x0A)
+		gpio_acc_5v = GPIO_V_ACCESSORY_5V;
+	else
+		gpio_acc_5v = GPIO_V_ACCESSORY_5V_REV05;
+
+	/*	token info
+		0 : force power off,
+		1 : usb otg
+		2 : ear jack
+		3 : keyboard
+	*/
 
 	if (active) {
 		acc_en_token |= (1 << token);
-
-		if (enable)
-			return ;
-
 		enable = true;
 		gpio_direction_output(gpio_acc_en, 1);
+		msleep(1);
+		while(!gpio_get_value(gpio_acc_5v)) {
+			gpio_direction_output(gpio_acc_en, 0);
+			msleep(10);
+			gpio_direction_output(gpio_acc_en, 1);
+			if (try_cnt > 30) {
+				pr_err("[acc] failed to enable the accessory_en");
+				break;
+			} else
+				try_cnt++;
+		}
 	} else {
-		acc_en_token &= ~(1 << token);
-
-		if (0 == acc_en_token) {
+		if (0 == token) {
 			gpio_direction_output(gpio_acc_en, 0);
 			enable = false;
+		} else {
+			acc_en_token &= ~(1 << token);
+			if (0 == acc_en_token) {
+				gpio_direction_output(gpio_acc_en, 0);
+				enable = false;
+			}
 		}
 	}
-	pr_info("Board P4 : %s token : %d, %s\n", __func__, token, enable ? "on" : "off");
+	pr_info("Board P4 : %s token : (%d,%d) %s\n", __func__,
+		token, active, enable ? "on" : "off");
 }
 
 static int p3_kbc_keycode[] = {
@@ -1520,8 +1586,24 @@ static struct uart_platform_data uart_pdata {
 };
 
 #else
+
+static int dock_wakeup(void)
+{
+	unsigned long status =
+		readl(IO_ADDRESS(TEGRA_PMC_BASE) + PMC_WAKE_STATUS);
+
+	if (status & TEGRA_WAKE_GPIO_PI5) {
+		writel(TEGRA_WAKE_GPIO_PI5,
+			IO_ADDRESS(TEGRA_PMC_BASE) + PMC_WAKE_STATUS);
+	}
+
+	return status & TEGRA_WAKE_GPIO_PI5 ? KEY_WAKEUP : KEY_RESERVED;
+}
+
 static struct dock_keyboard_platform_data kbd_pdata = {
 	.acc_power = tegra_acc_power,
+	.wakeup_key = dock_wakeup,
+	.accessory_irq_gpio = GPIO_ACCESSORY_INT,
 };
 
 static struct platform_device sec_keyboard = {
@@ -1655,8 +1737,14 @@ static struct platform_device sec_cdma_dpram = {
 };
 #endif
 
+static struct platform_device watchdog_device = {
+       .name = "watchdog",
+       .id = -1,
+
+};
+
 static struct platform_device *p3_devices[] __initdata = {
-	&androidusb_device,
+	&watchdog_device,
 #ifndef CONFIG_USB_ANDROID_RNDIS
 	&p3_rndis_device,
 #else
@@ -1666,7 +1754,6 @@ static struct platform_device *p3_devices[] __initdata = {
 	&tegra_uarta_device,
 	&tegra_btuart_device,
 	&pmu_device,
-	&tegra_udc_device,
 	&tegra_gart_device,
 	&tegra_aes_device,
 	&p3_keys_device,
@@ -1693,6 +1780,7 @@ static struct platform_device *p3_devices[] __initdata = {
 };
 
 static struct platform_device *p3_devices_rev05[] __initdata = {
+	&watchdog_device,
 	&androidusb_device,
 #ifndef CONFIG_USB_ANDROID_RNDIS
 	&p3_rndis_device,
@@ -2113,8 +2201,8 @@ static void p3_register_touch_callbacks(struct mxt_callbacks *cb)
 
 static struct mxt_platform_data p3_touch_platform_data = {
 	.numtouch = 10,
-	.max_x  = 1280,
-	.max_y  = 800,
+	.max_x  = 1279,
+	.max_y  = 799,
 	.init_platform_hw  = p3_touch_init_hw,
 	.exit_platform_hw  = p3_touch_exit_hw,
 	.suspend_platform_hw = p3_touch_suspend_hw,
@@ -2179,8 +2267,8 @@ static struct mxt_platform_data p3_touch_platform_data = {
 	 /* Atmel 20 -> 5 -> 50 (To avoid One finger Pinch Zoom) */
 	.touchscreen_config.mrgthr = 50,
 	.touchscreen_config.amphyst = 10,
-	.touchscreen_config.xrange = 800,
-	.touchscreen_config.yrange = 1280,
+	.touchscreen_config.xrange = 799,
+	.touchscreen_config.yrange = 1279,
 	.touchscreen_config.xloclip = 0,
 	.touchscreen_config.xhiclip = 0,
 	.touchscreen_config.yloclip = 0,
@@ -2194,7 +2282,7 @@ static struct mxt_platform_data p3_touch_platform_data = {
 	.touchscreen_config.xpitch = 1,
 	.touchscreen_config.ypitch = 3,
 	/*noise_suppression_config*/
-	.noise_suppression_config.ctrl = 5,
+	.noise_suppression_config.ctrl = 0x87,
 	.noise_suppression_config.reserved = 0,
 	.noise_suppression_config.reserved1 = 0,
 	.noise_suppression_config.reserved2 = 0,
@@ -2235,10 +2323,32 @@ static struct mxt_platform_data p3_touch_platform_data = {
 	.palmsupression_config.supextto = 5,
 	/*config change for ta connected*/
 	.tchthr_for_ta_connect = 80,
-	.tchdi_for_ta_connect = 2,
 	.noisethr_for_ta_connect = 55,
 	.idlegcafdepth_ta_connect = 32,
-	.actvgcafdepth_ta_connect = 63,
+        .freq_for_ta_connect[0] = 45,
+        .freq_for_ta_connect[1] = 49,
+        .freq_for_ta_connect[2] = 55,
+        .freq_for_ta_connect[3] = 59,
+        .freq_for_ta_connect[4] = 63,
+        .fherr_cnt = 0,
+        .tch_blen_for_fherr = 0,
+        .tchthr_for_fherr = 35,
+        .noisethr_for_fherr = 30,
+        .freq_for_fherr1[0] = 45,
+        .freq_for_fherr1[1] = 49,
+        .freq_for_fherr1[2] = 55,
+        .freq_for_fherr1[3] = 59,
+        .freq_for_fherr1[4] = 63,
+        .freq_for_fherr2[0] = 10,
+        .freq_for_fherr2[1] = 12,
+        .freq_for_fherr2[2] = 18,
+        .freq_for_fherr2[3] = 40,
+        .freq_for_fherr2[4] = 72,
+        .freq_for_fherr3[0] = 7,
+        .freq_for_fherr3[1] = 33,
+        .freq_for_fherr3[2] = 39,
+        .freq_for_fherr3[3] = 52,
+        .freq_for_fherr3[4] = 64,
 #ifdef MXT_CALIBRATE_WORKAROUND
 	/*autocal config at idle status*/
 	.atchcalst_idle = 9,
@@ -2300,6 +2410,7 @@ static struct tegra_ehci_platform_data tegra_ehci_pdata[] = {
 		.phy_config = &hsic_phy_config,
 		.operating_mode = TEGRA_USB_HOST,
 		.power_down_on_bus_suspend = 0,
+		.phy_type = TEGRA_USB_PHY_TYPE_LINK_ULPI,
 	},
 	[2] = {
 		.phy_config = &utmi_phy_config[1],
@@ -2514,6 +2625,9 @@ static void p3_usb_init(void)
 
 	platform_device_register(&tegra_otg_device);
 
+        platform_device_register(&androidusb_device);
+        platform_device_register(&tegra_udc_device);
+
 #ifdef CONFIG_SAMSUNG_LPM_MODE
 	if (!charging_mode_from_boot) {
 		tegra_ehci3_device.dev.platform_data=&tegra_ehci_pdata[2];
@@ -2575,6 +2689,27 @@ void p3_wlan_gpio_disable(void)
 
 }
 EXPORT_SYMBOL(p3_wlan_gpio_disable);
+
+void p3_wlan_reset_enable(void)
+{
+        printk(KERN_DEBUG "wlan reset enable OK\n");
+        gpio_set_value(GPIO_WLAN_EN, 1);
+        mdelay(100);
+        printk(KERN_DEBUG "wlan get value  (%d)\n",
+        gpio_get_value(GPIO_WLAN_EN));
+}
+EXPORT_SYMBOL(p3_wlan_reset_enable);
+
+void p3_wlan_reset_disable(void)
+{
+        printk(KERN_DEBUG "wlan reset disable OK\n");
+        gpio_set_value(GPIO_WLAN_EN, 0);
+        mdelay(100);
+        printk(KERN_DEBUG "wlan get value  (%d)\n",
+        gpio_get_value(GPIO_WLAN_EN));
+
+}
+EXPORT_SYMBOL(p3_wlan_reset_disable);
 
 int	is_JIG_ON_high()
 {
@@ -2654,12 +2789,19 @@ static int __init p3_gps_init(void)
 static void p3_power_off(void)
 {
 	int ret;
+	u32 value;
 
+/*    
 	gpio_set_value(GPIO_220_PMIC_PWRON, 0);
 	msleep(300);
 
 	gpio_set_value(GPIO_220_PMIC_PWRHOLD_OFF, 0);
 	msleep(100);
+*/
+	value = gpio_get_value(GPIO_TA_nCONNECTED);
+	if(!value) {
+		tps6586x_soft_rst();
+	}
 
 	ret = tps6586x_power_off();
 	if (ret)
@@ -2750,6 +2892,30 @@ static void p4_check_hwrev(void)
 }
 
 #ifdef CONFIG_KERNEL_DEBUG_SEC
+
+static ssize_t store_sec_debug_upload(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf,
+				  size_t count)
+
+{
+	int sec_debug_level = kernel_sec_get_debug_level();
+
+	if ( sec_debug_level == KERNEL_SEC_DEBUG_LEVEL_MID || sec_debug_level == KERNEL_SEC_DEBUG_LEVEL_HIGH ) {
+		if (strncmp(buf, "RILPANIC", 8) == 0) {
+			printk("=======================================\n");
+			printk("This is RIL PANIC call not Kernel Panic\n");
+			printk("=======================================\n");
+			kernel_sec_set_upload_cause(UPLOAD_CAUSE_KERNEL_PANIC);
+			kernel_sec_hw_reset(false);
+			emergency_restart();
+		}
+	}
+}
+
+static DEVICE_ATTR(sec_debug_upload, 0220, NULL, store_sec_debug_upload);
+
+
 /* Debug level control */
 static ssize_t show_sec_debug_level(struct device *dev,
 				 struct device_attribute *attr,
@@ -2871,6 +3037,10 @@ static void __init tegra_p3_init(void)
 	ret = device_create_file(platform, &dev_attr_sec_debug_level);
 	if (ret)
 		printk("Fail to create sec_debug_level file\n");
+
+	ret = device_create_file(platform, &dev_attr_sec_debug_upload);
+	if (ret)
+		printk("Fail to create sec_debug_upload file\n");
 #endif
 }
 

@@ -62,9 +62,9 @@ static const struct tegra_emc_table p5_emc_tables[] = {
             0x00000003,   /* FBIO_CFG6 */
             0x00000000,   /* ODT_WRITE */
             0x00000000,   /* ODT_READ */
-            0x00000082,   /* FBIO_CFG5 */
-            0xa06a04ae,   /* CFG_DIG_DLL */
-            0x00080000,   /* DLL_XFORM_DQS */
+            0x00000282,   /* FBIO_CFG5 */
+            0xa0ae04ae,   /* CFG_DIG_DLL */
+            0x007bea10,   /* DLL_XFORM_DQS */
             0x00000000,   /* DLL_XFORM_QUSE */
             0x00000000,   /* ZCAL_REF_CNT */
             0x00000003,   /* ZCAL_WAIT_CNT */
@@ -113,9 +113,9 @@ static const struct tegra_emc_table p5_emc_tables[] = {
             0x00000000,   /* FBIO_CFG6 */
             0x00000000,   /* ODT_WRITE */
             0x00000000,   /* ODT_READ */
-            0x00000082,   /* FBIO_CFG5 */
-            0xa06a04ae,   /* CFG_DIG_DLL */
-            0x00080000,   /* DLL_XFORM_DQS */
+            0x00000282,   /* FBIO_CFG5 */
+            0xa0ae04ae,   /* CFG_DIG_DLL */
+            0x007c2a10,   /* DLL_XFORM_DQS */
             0x00000000,   /* DLL_XFORM_QUSE */
             0x00000000,   /* ZCAL_REF_CNT */
             0x00000005,   /* ZCAL_WAIT_CNT */
@@ -164,9 +164,9 @@ static const struct tegra_emc_table p5_emc_tables[] = {
             0x00000000,   /* FBIO_CFG6 */
             0x00000000,   /* ODT_WRITE */
             0x00000000,   /* ODT_READ */
-            0x00000082,   /* FBIO_CFG5 */
-            0xa06a04ae,   /* CFG_DIG_DLL */
-            0x00080000,   /* DLL_XFORM_DQS */
+            0x00000282,   /* FBIO_CFG5 */
+            0xa0ae04ae,   /* CFG_DIG_DLL */
+            0x007c2a10,   /* DLL_XFORM_DQS */
             0x00000000,   /* DLL_XFORM_QUSE */
             0x00000000,   /* ZCAL_REF_CNT */
             0x00000007,   /* ZCAL_WAIT_CNT */
@@ -215,9 +215,9 @@ static const struct tegra_emc_table p5_emc_tables[] = {
             0x00000001,   /* FBIO_CFG6 */
             0x00000000,   /* ODT_WRITE */
             0x00000000,   /* ODT_READ */
-            0x00000082,   /* FBIO_CFG5 */
-            0xa04c04ae,   /* CFG_DIG_DLL */
-            0x007dea10,   /* DLL_XFORM_DQS */
+            0x00000282,   /* FBIO_CFG5 */
+            0xa07c04ae,   /* CFG_DIG_DLL */
+            0x007d9510,   /* DLL_XFORM_DQS */
             0x00000000,   /* DLL_XFORM_QUSE */
             0x00000000,   /* ZCAL_REF_CNT */
             0x0000000e,   /* ZCAL_WAIT_CNT */
@@ -267,8 +267,8 @@ static const struct tegra_emc_table p5_emc_tables[] = {
             0x00000000,   /* ODT_WRITE */
             0x00000000,   /* ODT_READ */
             0x00000282,   /* FBIO_CFG5 */
-            0xe03c048b,   /* CFG_DIG_DLL */
-            0x007e0010,   /* DLL_XFORM_DQS */
+            0xe059048b,   /* CFG_DIG_DLL */
+            0x007daa10,   /* DLL_XFORM_DQS */
             0x00000000,   /* DLL_XFORM_QUSE */
             0x00000000,   /* ZCAL_REF_CNT */
             0x0000001b,   /* ZCAL_WAIT_CNT */

@@ -36,6 +36,14 @@ extern struct snd_soc_dai wm8994_dai;
 
 #define WM8994_FACTORY_LOOPBACK
 
+//sungho_EF21
+#if defined(CONFIG_TARGET_LOCALE_KOR)
+#define WM8994_MUTE_STATE
+#if defined(CONFIG_MACH_SAMSUNG_P5)
+#define WM8994_VOIP_BT_NREC
+#endif
+#endif
+
 #define DEACTIVE		0x00
 #define PLAYBACK_ACTIVE		0x01
 #define CAPTURE_ACTIVE		0x02
@@ -69,6 +77,8 @@ Codec Output Path BIT
 #define PLAYBACK_RING_SPK_HP	(0x01 << 8)
 #define PLAYBACK_HP_NO_MIC  	(0x01 << 9)
 #define PLAYBACK_LINEOUT	(0x01 << 10)
+#define PLAYBACK_SPK_LINEOUT	(0x01 << 11) /* 0x800 */
+
 
 #define VOICECALL_RCV		(0x01 << 1)
 #define VOICECALL_SPK		(0x01 << 2)
@@ -92,19 +102,29 @@ Codec Output Path BIT
 #define VOIPCALL_HPMIC		(0x01 << 4)
 #define VOIPCALL_HP_OTHER	(0x01 << 5)
 #define VOIPCALL_HPMIC_OTHER	(0x01 << 6)
+#define VOIPCALL_SPK_OTHER		(0x01 << 7)
+#define VOIPCALL_MAINMIC_OTHER	(0x01 << 8)
 
 #if defined(CONFIG_MACH_SAMSUNG_P4) || defined(CONFIG_MACH_SAMSUNG_P4WIFI) || defined(CONFIG_MACH_SAMSUNG_P4LTE)
 #define PLAYBACK_GAIN_NUM 60
 #define VOICECALL_GAIN_NUM 33
 #define RECORDING_GAIN_NUM 24
 #define GAIN_CODE_NUM 13
-#define VOIPCALL_GAIN_NUM 38
+#if defined(CONFIG_TARGET_LOCALE_KOR)
+#define VOIPCALL_GAIN_NUM 41
+#else
+#define VOIPCALL_GAIN_NUM 52
+#endif
 #elif defined(CONFIG_MACH_SAMSUNG_P5)
 #define PLAYBACK_GAIN_NUM 58
 #define VOICECALL_GAIN_NUM 34
 #define RECORDING_GAIN_NUM 24
 #define GAIN_CODE_NUM 14
-#define VOIPCALL_GAIN_NUM 26
+#if defined(CONFIG_TARGET_LOCALE_KOR)
+#define VOIPCALL_GAIN_NUM 28
+#else
+#define VOIPCALL_GAIN_NUM 52
+#endif
 #else
 #define PLAYBACK_GAIN_NUM 58
 #define VOICECALL_GAIN_NUM 34
@@ -119,7 +139,7 @@ Codec Output Path BIT
 enum audio_path	{
 	OFF, RCV, SPK, HP, HP_NO_MIC, BT, SPK_HP,
 	RING_SPK, RING_HP, RING_NO_MIC, RING_SPK_HP,
-	LINEOUT
+	LINEOUT, SPK_LINEOUT
 };
 enum mic_path		{MAIN, EAR, BT_REC, MIC_OFF};
 enum power_state	{CODEC_OFF, CODEC_ON };
@@ -128,6 +148,15 @@ enum input_source_state	{DEFAULT, RECOGNITION, CAMCORDER};
 enum voip_state		{VOIP_OFF, VOIP_ON, VOIP_ON_OTHER};
 #ifdef WM8994_FACTORY_LOOPBACK
 enum loopback_state	{spk, ear, ear_pmic, off};
+#endif
+enum locale_code {LC_DEFAULT, LC_EUR, LC_NONEUR};
+
+#ifdef WM8994_MUTE_STATE
+enum state_mute {MUTE_OFF, RX_MUTE, TX_MUTE};
+#endif
+
+#ifdef WM8994_VOIP_BT_NREC
+enum voip_bt_nrec_states {VOIP_BT_NREC_OFF, VOIP_BT_NREC_ON};
 #endif
 
 typedef void (*select_route)(struct snd_soc_codec *);
@@ -174,6 +203,14 @@ struct wm8994_priv {
 #ifdef WM8994_FACTORY_LOOPBACK
 	int loopback_path_control;	//for AT command codec loopback test
 #endif
+	enum locale_code target_locale;
+#ifdef WM8994_MUTE_STATE
+	//sungho_EF20 
+	enum state_mute mute_state;
+#endif
+#ifdef WM8994_VOIP_BT_NREC
+	enum voip_bt_nrec_states voip_bt_nrec_state;
+#endif
 };
 
 struct gain_info_t {
@@ -212,6 +249,7 @@ void wm8994_set_playback_speaker(struct snd_soc_codec *codec);
 void wm8994_set_playback_bluetooth(struct snd_soc_codec *codec);
 void wm8994_set_playback_speaker_headset(struct snd_soc_codec *codec);
 void wm8994_set_playback_extra_dock_speaker(struct snd_soc_codec *codec);
+void wm8994_set_playback_speaker_lineout(struct snd_soc_codec *codec);
 void wm8994_set_voicecall_common_setting(struct snd_soc_codec *codec);
 void wm8994_set_voicecall_receiver(struct snd_soc_codec *codec);
 void wm8994_set_voicecall_headset(struct snd_soc_codec *codec);

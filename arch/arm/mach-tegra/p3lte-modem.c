@@ -117,10 +117,10 @@ static void lte_off(struct modemctl *mc)
 
 	gpio_set_value(mc->gpio_phone_on, 0);
          	gpio_set_value(mc->gpio_cp_reset, 0); 
-	msleep(300);
+	mdelay(300);
 
 	gpio_set_value(mc->gpio_phone_off, 0);
-         msleep(300);
+         mdelay(300);
 
 }
 

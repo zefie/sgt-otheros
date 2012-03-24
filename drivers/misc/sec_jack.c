@@ -30,6 +30,7 @@
 #include <linux/gpio.h>
 #include <linux/gpio_event.h>
 #include <linux/sec_jack.h>
+#include <asm-generic/syscalls.h>
 
 #define MAX_ZONE_LIMIT		10
 #define SEND_KEY_CHECK_TIME_MS	30		/* 30ms */
@@ -224,6 +225,30 @@ static void sec_jack_set_type(struct sec_jack_info *hi, int jack_type)
 
 	hi->cur_jack_type = jack_type;
 	pr_info("%s : jack_type = %d\n", __func__, jack_type);
+
+	// Zefie's OtherOS Mod .. executes argv[0] when status of headphone jack
+	// changes, allowing manual reconfiguration of ALSA
+	char jtchar[1];
+	sprintf(jtchar,"%d",jack_type);
+        char *argv[] = { "/usr/local/sbin/sec_jack_alsa_event", jtchar, NULL };
+        static char * envp[] = { "HOME=/tmp",
+				 "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+				  NULL };
+
+        int ret = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
+        if (ret)
+                pr_info("[SGT-OtherOS] helper command: %s %s exit code %u (0x%x)\n",
+                                argv[0], jtchar,
+                                (ret >> 8) & 0xff, ret);
+        else
+                pr_info("[SGT-OtherOS] helper command: %s %s exit code %u (0x%x)\n",
+                                argv[0], jtchar,
+                                (ret >> 8) & 0xff, ret);
+
+        if (ret < 0) /* Ignore any ERRNOs we got. */
+                ret = 0;
+
+	// End Zefie's OtherOS Mod
 
 	switch_set_state(&switch_jack_detection, jack_type);
 }

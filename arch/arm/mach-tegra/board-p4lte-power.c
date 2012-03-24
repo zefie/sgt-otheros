@@ -101,21 +101,30 @@ static struct regulator_consumer_supply tps658621_ldo9_supply[] = {
 	REGULATOR_SUPPLY("avdd_amp", NULL),
 };
 
-#define REGULATOR_INIT(_id, _minmv, _maxmv)				\
-	{								\
-		.constraints = {					\
-			.min_uV = (_minmv)*1000,			\
-			.max_uV = (_maxmv)*1000,			\
-			.valid_modes_mask = (REGULATOR_MODE_NORMAL |	\
-					     REGULATOR_MODE_STANDBY),	\
-			.valid_ops_mask = (REGULATOR_CHANGE_MODE |	\
-					   REGULATOR_CHANGE_STATUS |	\
-					   REGULATOR_CHANGE_VOLTAGE),	\
-			.always_on = 1,					\
-		},							\
-		.num_consumer_supplies = ARRAY_SIZE(tps658621_##_id##_supply),\
-		.consumer_supplies = tps658621_##_id##_supply,		\
-	}
+/*
+ * Current TPS6586x is known for having a voltage glitch if current load changes
+ * from low to high in auto PWM/PFM mode for CPU's Vdd line.
+ */
+static struct tps6586x_settings sm_config = {
+        .sm_pwm_mode = PWM_ONLY,
+};
+
+#define REGULATOR_INIT(_id, _minmv, _maxmv, onoff, config)                              \
+        {                                                               \
+                .constraints = {                                        \
+                        .min_uV = (_minmv)*1000,                        \
+                        .max_uV = (_maxmv)*1000,                        \
+                        .valid_modes_mask = (REGULATOR_MODE_NORMAL |    \
+                                             REGULATOR_MODE_STANDBY),   \
+                        .valid_ops_mask = (REGULATOR_CHANGE_MODE |      \
+                                           REGULATOR_CHANGE_STATUS |    \
+                                           REGULATOR_CHANGE_VOLTAGE),   \
+                        .always_on = onoff,                                     \
+                },                                                      \
+                .num_consumer_supplies = ARRAY_SIZE(tps658621_##_id##_supply),\
+                .consumer_supplies = tps658621_##_id##_supply,          \
+                .driver_data = config,                                  \
+        }
 
 /*
  * The next macro added. Some power-rails need to be enabled & set from
@@ -145,14 +154,14 @@ static struct regulator_consumer_supply tps658621_ldo9_supply[] = {
  * These should be reviewed and made dynamically controllable
  * by drivers if possible to save power.
  */
-static struct regulator_init_data sm0_data  = REGULATOR_INIT(sm0,   725, 1500);
-static struct regulator_init_data sm1_data  = REGULATOR_INIT(sm1,   725, 1500);
-static struct regulator_init_data sm2_data  = REGULATOR_INIT(sm2,  1800, 1800);
-static struct regulator_init_data ldo1_data = REGULATOR_INIT(ldo1, 1100, 1100);
-static struct regulator_init_data ldo2_data = REGULATOR_INIT(ldo2,  725, 1500);
-static struct regulator_init_data ldo3_data = REGULATOR_INIT(ldo3, 3300, 3300);
-static struct regulator_init_data ldo4_data = REGULATOR_INIT(ldo4, 1800, 1800);
-static struct regulator_init_data ldo9_data = REGULATOR_INIT(ldo9, 2850, 2850);
+static struct regulator_init_data sm0_data  = REGULATOR_INIT(sm0,  725, 1500, ON, &sm_config);
+static struct regulator_init_data sm1_data  = REGULATOR_INIT(sm1,  725, 1500, ON, &sm_config);
+static struct regulator_init_data sm2_data  = REGULATOR_INIT(sm2, 1800, 1800, ON, NULL);
+static struct regulator_init_data ldo1_data = REGULATOR_INIT(ldo1, 1100, 1100, ON, NULL);
+static struct regulator_init_data ldo2_data = REGULATOR_INIT(ldo2,  725, 1500, ON, NULL);
+static struct regulator_init_data ldo3_data = REGULATOR_INIT(ldo3, 3300, 3300, ON, NULL);
+static struct regulator_init_data ldo4_data = REGULATOR_INIT(ldo4, 1800, 1800, ON, NULL);
+static struct regulator_init_data ldo9_data = REGULATOR_INIT(ldo9, 2850, 2850, ON, NULL);
 
 /* Regulators that are not enabled by the bootloader */
 static struct regulator_init_data ldo0_data = REGULATOR_SET(ldo0, 3300, OFF);
@@ -170,11 +179,14 @@ static struct regulator_init_data ldo6_data = REGULATOR_SET(ldo6, 3300, ON);
 static struct tps6586x_rtc_platform_data rtc_data = {
 	.irq = TEGRA_NR_IRQS + TPS6586X_INT_RTC_ALM1,
 	.start = {
-		.year = 2011,
+		.year = 2004,
 		.month = 1,
 		.day = 1,
 	},
 	.cl_sel = TPS6586X_RTC_CL_SEL_7_5PF, /* use 7.5pF */
+#ifdef CONFIG_MACH_SAMSUNG_VARIATION_TEGRA
+	.default_year = 2011,
+#endif	
 };
 
 static struct led_tps6586x_pdata led_data = {
@@ -252,10 +264,10 @@ static struct tegra_suspend_platform_data p3_suspend_data = {
 		TEGRA_WAKE_RTC_ALARM | TEGRA_WAKE_GPIO_PY6 |
 		TEGRA_WAKE_GPIO_PI5,
 	.wake_high	= TEGRA_WAKE_GPIO_PS4,
-	.wake_low	= TEGRA_WAKE_GPIO_PQ7 | TEGRA_WAKE_GPIO_PY6 | TEGRA_WAKE_GPIO_PI5,
+	.wake_low	= TEGRA_WAKE_GPIO_PQ7 | TEGRA_WAKE_GPIO_PY6 | TEGRA_WAKE_GPIO_PJ7,
 	.wake_any	= TEGRA_WAKE_GPIO_PW2 | TEGRA_WAKE_RTC_ALARM |
-				TEGRA_WAKE_GPIO_PJ7 | TEGRA_WAKE_GPIO_PS5 |
-				TEGRA_WAKE_GPIO_PQ6,
+				    TEGRA_WAKE_GPIO_PS5 |TEGRA_WAKE_GPIO_PQ6 | 
+				    TEGRA_WAKE_GPIO_PI5,
 };
 
 static struct tegra_suspend_platform_data p3_suspend_data_rev05 = {

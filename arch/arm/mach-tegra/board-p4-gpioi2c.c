@@ -212,8 +212,13 @@ static struct platform_device tegra_gpio_i2c15_device = {
 #endif
 
 static struct max17042_platform_data max17042_pdata = {
+#if !defined(CONFIG_MACH_SAMSUNG_P3_P7100)
 	.sdi_capacity = 0x340A,
 	.sdi_vfcapacity = 0x478A,
+#else
+	.sdi_capacity = 0x3642,
+	.sdi_vfcapacity = 0x4866,
+#endif
 	.atl_capacity = 0x349A,
 	.atl_vfcapacity = 0x4630,
 	.fuel_alert_line = GPIO_FUEL_ALRT,
@@ -467,7 +472,6 @@ static void sii9234_hw_off(void)
 	regulator_disable(reg);
 	regulator_put(reg);
 
-	usleep_range(10000, 20000);
 	gpio_set_value(GPIO_MHL_RST, 0);
 }
 
@@ -531,7 +535,9 @@ int __init p3_gpio_i2c_init(void)
 		platform_device_register(&tegra_gpio_i2c12_device);
 		platform_device_register(&tegra_gpio_i2c13_device);
 		platform_device_register(&tegra_gpio_i2c14_device);
+#if defined(CONFIG_VIBTONZ)
 		platform_device_register(&tegra_gpio_i2c15_device);
+#endif
 	}
 	i2c_register_board_info(6, sec_gpio_i2c6_info,
 				ARRAY_SIZE(sec_gpio_i2c6_info));
@@ -551,8 +557,10 @@ int __init p3_gpio_i2c_init(void)
 		sii9234_init();
 		i2c_register_board_info(14, sec_gpio_i2c14_info,
 					ARRAY_SIZE(sec_gpio_i2c14_info));
+#if defined(CONFIG_VIBTONZ)
 		i2c_register_board_info(15, sec_gpio_i2c15_info,
 					ARRAY_SIZE(sec_gpio_i2c15_info));
+#endif
 	}
 	return 0;
 }

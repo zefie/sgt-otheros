@@ -455,6 +455,7 @@ static inline bool alloc_desc_masks(struct irq_desc *desc, int node,
 	}
 #endif
 #endif
+
 	return true;
 }
 

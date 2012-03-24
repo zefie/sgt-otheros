@@ -25,7 +25,6 @@
 #include <asm/mach-types.h>
 #include <linux/platform_device.h>
 #include <linux/earlysuspend.h>
-#include <linux/kernel.h>
 #include <linux/pwm_backlight.h>
 #include <mach/nvhost.h>
 #include <mach/nvmap.h>
@@ -143,6 +142,28 @@ static struct resource p3_disp2_resources[] = {
 	},
 };
 
+#if defined(CONFIG_TARGET_LOCALE_KOR)
+
+static struct tegra_dc_mode p3_panel_modes[] = {
+       {          // SAMSULG PLS LCD panel
+                 .pclk = 72000000,
+		.h_ref_to_sync = 1,
+		.v_ref_to_sync = 1,
+		.h_sync_width = 48,
+		.v_sync_width = 3,
+		.h_back_porch = 88,
+                 .v_back_porch = 34-1,
+		.h_active = 1280,
+		.v_active = 800,
+		.h_front_porch = 16,
+                 .v_front_porch = 1+1,
+		.flags = TEGRA_DC_MODE_FLAG_NEG_V_SYNC
+			| TEGRA_DC_MODE_FLAG_NEG_H_SYNC,
+	},
+};
+
+#else // kyNam_110614_
+
 static struct tegra_dc_mode p3_panel_modes[] = {
 	{	/* SAMSULG PLS LCD panel */
 		.pclk = 68941176, /* for lcd pclk 68.94Mhz */
@@ -160,6 +181,7 @@ static struct tegra_dc_mode p3_panel_modes[] = {
 			| TEGRA_DC_MODE_FLAG_NEG_H_SYNC,
 	},
 };
+#endif 
 
 static struct tegra_fb_data p3_fb_data = {
 	.win		= 0,
@@ -302,6 +324,28 @@ static struct platform_device *p3_gfx_devices[] __initdata = {
 	&p3_device_cmc623,
 };
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+
+/* put early_suspend/late_resume handlers here for the display in order
+ * to keep the code out of the display driver, keeping it closer to upstream
+ */
+struct early_suspend p3_panel_early_suspender;
+
+static void p3_panel_early_suspend(struct early_suspend *h)
+{
+        unsigned i;
+        for (i = 0; i < num_registered_fb; i++)
+                fb_blank(registered_fb[i], FB_BLANK_POWERDOWN);
+}
+
+static void p3_panel_late_resume(struct early_suspend *h)
+{
+        unsigned i;
+        for (i = 0; i < num_registered_fb; i++)
+                fb_blank(registered_fb[i], FB_BLANK_UNBLANK);
+}
+#endif
+
 int __init p3_panel_init(void)
 {
 	int err;
@@ -310,6 +354,13 @@ int __init p3_panel_init(void)
 	tegra_gpio_enable(GPIO_HDMI_HPD);
 	gpio_request(GPIO_HDMI_HPD, "hdmi_hpd");
 	gpio_direction_input(GPIO_HDMI_HPD);
+
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	p3_panel_early_suspender.suspend = p3_panel_early_suspend;
+	p3_panel_early_suspender.resume = p3_panel_late_resume;
+	p3_panel_early_suspender.level = EARLY_SUSPEND_LEVEL_DISABLE_FB;
+	register_early_suspend(&p3_panel_early_suspender);
+#endif
 
 	p3_carveouts[1].base = tegra_carveout_start;
 	p3_carveouts[1].size = tegra_carveout_size;

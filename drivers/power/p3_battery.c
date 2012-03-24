@@ -33,6 +33,9 @@
 #include <linux/power/p3_battery.h>
 #include <linux/power/max17042_battery.h>
 
+#ifdef CONFIG_KERNEL_DEBUG_SEC
+#include <linux/kernel_sec_common.h>
+#endif
 
 #define FAST_POLL	40	/* 40 sec */
 #define SLOW_POLL	(30*60)	/* 30 min */
@@ -65,11 +68,13 @@ struct battery_info {
 	s32 batt_vol;		/* Battery voltage from ADC */
 	s32 batt_temp;		/* Battery Temperature (C) from ADC */
 	s32 batt_current;	/* Battery current from ADC */
+	s32 force_usb_charging;
 	u32 level;		/* formula */
 	u32 charging_source;	/* 0: no cable, 1:usb, 2:AC */
 	u32 charging_enabled;	/* 0: Disable, 1: Enable */
 	u32 batt_health;	/* Battery Health (Authority) */
 	u32 batt_is_full;       /* 0 : Not full 1: Full */
+	u32 abstimer_is_active;       /* 0 : Not active 1: Active */
 	u32 batt_is_recharging; /* 0 : Not recharging 1: Recharging */
 	u32 batt_improper_ta; /* 1: improper ta */
 };
@@ -82,18 +87,27 @@ struct battery_data {
 	struct power_supply	psy_usb;
 	struct power_supply	psy_ac;
 	struct workqueue_struct	*p3_TA_workqueue;
+#ifdef CONFIG_TARGET_LOCALE_KOR
+	struct workqueue_struct	*low_bat_comp_workqueue;
+#endif
 	struct work_struct	battery_work;
 	struct work_struct	cable_work;
 	struct delayed_work	TA_work;
 	struct delayed_work	fuelgauge_work;
 	struct delayed_work	fullcharging_work;
 	struct delayed_work	full_comp_work;
+#ifdef CONFIG_TARGET_LOCALE_KOR
+	struct delayed_work	low_comp_work;
+#endif
 	struct alarm		alarm;
 	struct mutex		work_lock;
 	struct wake_lock	vbus_wake_lock;
 	struct wake_lock	cable_wake_lock;
 	struct wake_lock	work_wake_lock;
 	struct wake_lock	fullcharge_wake_lock;
+#ifdef CONFIG_TARGET_LOCALE_KOR
+	struct wake_lock	low_comp_wake_lock;
+#endif
 #ifdef __TEST_DEVICE_DRIVER__ 
 	struct wake_lock	wake_lock_for_dev;
 #endif /* __TEST_DEVICE_DRIVER__ */
@@ -114,8 +128,10 @@ struct battery_data {
 	int fg_chk_cnt;
 	int recharging_cnt;
 	int previous_charging_status;
+#if !defined(CONFIG_MACH_SAMSUNG_P4) || !defined(CONFIG_MACH_SAMSUNG_P4WIFI) || !defined(CONFIG_MACH_SAMSUNG_P4LTE)
 	int full_check_flag;
 	bool is_first_check;
+#endif
 };
 
 struct battery_data *test_batterydata;
@@ -180,7 +196,15 @@ static void lpm_mode_check(struct battery_data *battery)
 	} else {
 		pr_info("%s: ta no longer connected, powering off\n", __func__);
 		if (pm_power_off)
+		{
+#ifdef CONFIG_KERNEL_DEBUG_SEC
+            kernel_sec_upload_cause_type upload_cause = kernel_sec_get_upload_cause();
+            if (upload_cause == UPLOAD_CAUSE_INIT)
+                /* Clear the magic number because it's normal reboot */
+                kernel_sec_clear_upload_magic_number();
+#endif
 			pm_power_off();
+		}
 	}
 }
 #endif
@@ -199,8 +223,9 @@ static void p3_set_charging(struct battery_data *battery, int charger_type)
 		set_chargcurr_high(battery, 1);
 		break;
 	case 2:
-	default:
 		set_chargcurr_high(battery, 0);
+	case 3: // maintain previous setting value when stop charging
+	default:
 		break;
 	}
 }
@@ -381,13 +406,16 @@ static int p3_get_bat_level(struct power_supply *bat_ps)
 		battery->info.batt_vol = fg_vcell;
 
 	fg_current = get_fuelgauge_value(FG_CURRENT);
+#if !defined(CONFIG_MACH_SAMSUNG_P4) || !defined(CONFIG_MACH_SAMSUNG_P4WIFI) || !defined(CONFIG_MACH_SAMSUNG_P4LTE)
 	avg_current = get_fuelgauge_value(FG_CURRENT_AVG);
 	fg_vfsoc = get_fuelgauge_value(FG_VF_SOC);
 
 	// Algorithm for reducing time to fully charged (from MAXIM)
 	if(battery->info.charging_enabled &&  // Charging is enabled
 		!battery->info.batt_is_recharging &&  // Not Recharging
-		battery->info.charging_source == CHARGER_AC &&  // Only AC (Not USB cable)
+		(battery->info.charging_source == CHARGER_AC ||
+		(battery->info.charging_source == CHARGER_USB &&
+		battery->info.force_usb_charging)) &&
 		!battery->is_first_check &&  // Skip when first check after boot up
 		(fg_vfsoc>70 && (fg_current>20 && fg_current<250) &&
 		(avg_current>20 && avg_current<260))) {
@@ -405,12 +433,16 @@ static int p3_get_bat_level(struct power_supply *bat_ps)
 	}
 	else
 		battery->full_check_flag = 0;
+#endif
 
-	if (battery->info.charging_source == CHARGER_AC &&
+	if ((battery->info.charging_source == CHARGER_AC ||
+		(battery->info.charging_source == CHARGER_USB &&
+		battery->info.force_usb_charging)) &&
 		battery->info.batt_improper_ta == 0) {
 		if (is_over_abs_time(battery)) {
-			fg_soc = 100;
-			battery->info.batt_is_full = 1;
+			//fg_soc = 100;
+			//battery->info.batt_is_full = 1;
+			battery->info.abstimer_is_active = 1;
 			pr_info("%s: charging time is over", __func__);
 			pr_info("%s: fg_vcell = %d, fg_soc = %d,"
 				" is_full = %d\n",
@@ -420,12 +452,21 @@ static int p3_get_bat_level(struct power_supply *bat_ps)
 			goto __end__;
 		}
 	}
+        else
+        {
+                if(battery->info.abstimer_is_active)
+                {
+                        battery->info.abstimer_is_active = 0;
+                        pr_info("[battery] abs timer become inactive \n");
+                }
+        }
 
 	if (fg_vcell <= battery->pdata->recharge_voltage) {
-		if (battery->info.batt_is_full &&
+
+		if ((battery->info.batt_is_full || battery->info.abstimer_is_active) &&
 			!battery->info.charging_enabled) {
 			if (++battery->recharging_cnt > 1) {
-				pr_info("recharging(under full)");
+				pr_info("recharging(under full) \n");
 				battery->info.batt_is_recharging = 1;
 				p3_set_chg_en(battery, 1);
 				battery->recharging_cnt = 0;
@@ -444,18 +485,37 @@ static int p3_get_bat_level(struct power_supply *bat_ps)
 
 	/*  Checks vcell level and tries to compensate SOC if needed.*/
 	/*  If jig cable is connected, then skip low batt compensation check. */
+#ifdef CONFIG_TARGET_LOCALE_KOR
+	pr_info("%s : chek point 1, cond: %d!\n",__func__, max17042_chip_data->low_comp_pre_cond);
+	if (!check_jig_on() && !battery->info.charging_enabled 
+		&& max17042_chip_data->low_comp_pre_cond == 0) {
+		if (p3_low_batt_compensation(fg_soc, fg_vcell, fg_current) == 1)
+			pr_info("error ");
+	}
+
+	 if(max17042_chip_data->pre_cond_ok == 1) {
+		max17042_chip_data->low_comp_pre_cond = 1;
+		pr_info("%s : schedule low batt compensation! pre_count(%d), pre_condition(%d)\n",
+			__func__, max17042_chip_data->pre_cond_ok, max17042_chip_data->low_comp_pre_cond);
+		wake_lock(&battery->low_comp_wake_lock);
+		queue_delayed_work(battery->low_bat_comp_workqueue, &battery->low_comp_work, 0);
+	}
+#else
 	if (!check_jig_on() && !battery->info.charging_enabled)
 		fg_soc = p3_low_batt_compensation(fg_soc, fg_vcell, fg_current);
+#endif
 
 __end__:
 	pr_debug("fg_vcell = %d, fg_soc = %d, is_full = %d",
 		fg_vcell, fg_soc, battery->info.batt_is_full);
 
+#if !defined(CONFIG_MACH_SAMSUNG_P4) || !defined(CONFIG_MACH_SAMSUNG_P4WIFI) || !defined(CONFIG_MACH_SAMSUNG_P4LTE)
 	if(battery->is_first_check)
 		battery->is_first_check = false;
+#endif
 
 	if (battery->info.batt_is_full &&
-		(battery->info.charging_source != CHARGER_USB))
+		(battery->info.charging_source != CHARGER_USB || battery->info.force_usb_charging))
 		fg_soc = 100;
 #if 0 // not used
 	else {
@@ -529,7 +589,10 @@ static void p3_set_chg_en(struct battery_data *battery, int enable)
 			} else if (battery->current_cable_status ==
 				CHARGER_USB) {
 				pr_info("USB charger!!");
-				p3_set_charging(battery, 2);
+				if (battery->info.force_usb_charging)
+					p3_set_charging(battery, 1);
+				else
+					p3_set_charging(battery, 2);
 				gpio_set_value(charger_enable_line, 0);
 			} else {
 				pr_info("else type charger!!");
@@ -541,7 +604,11 @@ static void p3_set_chg_en(struct battery_data *battery, int enable)
 		}
 	} else {
 		gpio_set_value(charger_enable_line, 1);
-		p3_set_charging(battery, 3);
+		if (battery->current_cable_status == CHARGER_BATTERY)  { // charging stopped by cable disconnected
+			p3_set_charging(battery, 2);
+		} else { // charging stopped with cable connected
+			p3_set_charging(battery, 3);
+		}
 		udelay(10);
 		pr_info("%s: Disabling the external charger ", __func__);
 		p3_set_time_for_charging(battery, 0);
@@ -669,7 +736,17 @@ static int p3_bat_get_charging_status(struct battery_data *battery)
 	switch (battery->info.charging_source) {
 	case CHARGER_BATTERY:
 	case CHARGER_USB:
-		return POWER_SUPPLY_STATUS_DISCHARGING;
+		if (battery->info.force_usb_charging) {
+			if (battery->current_cable_status != CHARGER_BATTERY) {
+				if (battery->info.batt_is_full || battery->info.level == 100)
+					return POWER_SUPPLY_STATUS_FULL;
+				else if(!battery->info.batt_is_full || battery->info.level != 100)
+					return POWER_SUPPLY_STATUS_CHARGING;
+			} else
+				return POWER_SUPPLY_STATUS_DISCHARGING;
+		} else {
+			return POWER_SUPPLY_STATUS_DISCHARGING;
+		}
 	case CHARGER_AC:
 		if (battery->info.batt_is_full ||
 			battery->info.level == 100)
@@ -778,6 +855,8 @@ static struct device_attribute p3_battery_attrs[] = {
 #ifdef CONFIG_MACH_SAMSUNG_P5
 	SEC_BATTERY_ATTR(batt_temp_cels),
 #endif
+	SEC_BATTERY_ATTR(batt_current),
+	SEC_BATTERY_ATTR(force_usb_charging),
 	SEC_BATTERY_ATTR(charging_source),
 	SEC_BATTERY_ATTR(fg_soc),
 	SEC_BATTERY_ATTR(reset_soc),
@@ -798,6 +877,8 @@ enum {
 #ifdef CONFIG_MACH_SAMSUNG_P5
 	BATT_TEMP_CELS,
 #endif
+	BATT_CURRENT,
+	FORCE_USB_CHARGING,
 	BATT_CHARGING_SOURCE,
 	BATT_FG_SOC,
 	BATT_RESET_SOC,
@@ -856,6 +937,14 @@ static ssize_t p3_bat_show_property(struct device *dev,
 			temp);
 			break;
 #endif			
+	case BATT_CURRENT:
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
+		get_fuelgauge_value(FG_CURRENT_AVG));
+		break;
+	case FORCE_USB_CHARGING:
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
+		test_batterydata->info.force_usb_charging);
+		break;
 	case BATT_CHARGING_SOURCE:
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
 		test_batterydata->info.charging_source);
@@ -907,6 +996,16 @@ static ssize_t p3_bat_store(struct device *dev,
 	const ptrdiff_t off = attr - p3_battery_attrs;
 
 	switch (off) {
+	case FORCE_USB_CHARGING:
+		if (sscanf(buf, "%d\n", &x) == 1) {
+			if (x == 1)
+				test_batterydata->info.force_usb_charging = true;
+			else
+				test_batterydata->info.force_usb_charging = false;
+			ret = count;
+			p3_bat_status_update(&test_batterydata->psy_battery);
+		}
+		break;
 	case BATT_RESET_SOC:
 		if (sscanf(buf, "%d\n", &x) == 1) {
 			if (x == 1) {
@@ -1336,6 +1435,43 @@ static void fullcharging_work_handler(struct work_struct *work)
 
 }
 
+#ifdef CONFIG_TARGET_LOCALE_KOR
+static void low_comp_work_handler(struct work_struct *work)
+{
+	struct battery_data *battery =
+		container_of(work, struct battery_data, low_comp_work.work);
+	int fg_soc;
+	int fg_vcell;
+	int fg_current;	
+	int i, comp_result;
+
+	fg_soc = battery->info.level;
+
+	for (i = 0 ; i<10 ; i++) {
+		fg_vcell = get_fuelgauge_value(FG_VOLTAGE);
+		fg_current = get_fuelgauge_value(FG_CURRENT);
+		pr_info("%s : running", __func__);
+
+		comp_result = p3_low_batt_compensation(fg_soc, fg_vcell, fg_current);
+		if (comp_result == 2) {
+			pr_info("%s : soc(%d), vcell(%d), current(%d), count(%d), pre_count(%d), pre_condition(%d)\n",
+				__func__, fg_soc, fg_vcell, fg_current, i,
+				max17042_chip_data->pre_cond_ok, max17042_chip_data->low_comp_pre_cond);
+			break;
+		}
+		else if (comp_result == 1) {
+			pr_info("%s : low compensation occurred!, vcell(%d), current(%d)\n",
+				__func__, fg_vcell, fg_current);
+			wake_lock(&battery->work_wake_lock);
+			schedule_work(&battery->battery_work);
+			break;
+		}
+		msleep(2000);
+	}
+	wake_unlock(&battery->low_comp_wake_lock);
+}
+#endif
+
 static int __devinit p3_bat_probe(struct platform_device *pdev)
 {
 	struct p3_battery_platform_data *pdata = dev_get_platdata(&pdev->dev);
@@ -1344,16 +1480,17 @@ static int __devinit p3_bat_probe(struct platform_device *pdev)
 	unsigned long trigger;
 	int irq_num;
 
+	if (!pdata) {
+		pr_err("%s : No platform data\n", __func__);
+		return -EINVAL;
+	}
+	
 	battery = kzalloc(sizeof(*battery), GFP_KERNEL);
 	if (!battery)
 		return -ENOMEM;
 
 	battery->pdata = pdata;
-	if (!battery->pdata) {
-		pr_err("%s : No platform data\n", __func__);
-		return -EINVAL;
-	}
-
+	
 	battery->pdata->init_charger_gpio();
 
 	platform_set_drvdata(pdev, battery);
@@ -1363,7 +1500,10 @@ static int __devinit p3_bat_probe(struct platform_device *pdev)
 	battery->info.level = 100;
 	battery->info.charging_source = CHARGER_BATTERY;
 	battery->info.batt_health = POWER_SUPPLY_HEALTH_GOOD;
+	battery->info.abstimer_is_active = 0;
+#if !defined(CONFIG_MACH_SAMSUNG_P4) || !defined(CONFIG_MACH_SAMSUNG_P4WIFI) || !defined(CONFIG_MACH_SAMSUNG_P4LTE)
 	battery->is_first_check = true;
+#endif
 
 	battery->psy_battery.name = "battery";
 	battery->psy_battery.type = POWER_SUPPLY_TYPE_BATTERY;
@@ -1397,6 +1537,10 @@ static int __devinit p3_bat_probe(struct platform_device *pdev)
 		"temp wake lock");
 	wake_lock_init(&battery->fullcharge_wake_lock, WAKE_LOCK_SUSPEND,
 		"fullcharge wake lock");
+#ifdef CONFIG_TARGET_LOCALE_KOR
+	wake_lock_init(&battery->low_comp_wake_lock, WAKE_LOCK_SUSPEND,
+		"low comp wake lock");
+#endif
 #ifdef __TEST_DEVICE_DRIVER__
 	wake_lock_init(&battery->wake_lock_for_dev, WAKE_LOCK_SUSPEND,
 		"test mode wake lock");
@@ -1409,13 +1553,27 @@ static int __devinit p3_bat_probe(struct platform_device *pdev)
 			fullcharging_work_handler);
 	INIT_DELAYED_WORK(&battery->full_comp_work, full_comp_work_handler);
 	INIT_DELAYED_WORK(&battery->TA_work, p3_TA_work_handler);
+#ifdef CONFIG_TARGET_LOCALE_KOR
+	INIT_DELAYED_WORK(&battery->low_comp_work, low_comp_work_handler);
+#endif
 	battery->p3_TA_workqueue = create_singlethread_workqueue(
 		"p3_TA_workqueue");
+#ifdef CONFIG_TARGET_LOCALE_KOR
+	battery->low_bat_comp_workqueue = create_singlethread_workqueue(
+		"low_bat_comp_workqueue");
+#endif
 	if (!battery->p3_TA_workqueue) {
 		pr_err("Failed to create single workqueue\n");
 		ret = -ENOMEM;
 		goto err_workqueue_init;
 	}
+#ifdef CONFIG_TARGET_LOCALE_KOR
+	if (!battery->low_bat_comp_workqueue) {
+		pr_err("Failed to create low_bat_comp_workqueue workqueue\n");
+		ret = -ENOMEM;
+		goto err_workqueue_init;
+	}
+#endif
 
 	battery->last_poll = alarm_get_elapsed_realtime();
 	alarm_init(&battery->alarm, ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP,
@@ -1479,7 +1637,9 @@ static int __devinit p3_bat_probe(struct platform_device *pdev)
 	p3_cable_check_status(battery);
 
 	/* before enable fullcharge interrupt, check fullcharge */
-	if (battery->info.charging_source == CHARGER_AC
+	if ((battery->info.charging_source == CHARGER_AC ||
+		(battery->info.charging_source == CHARGER_USB &&
+		battery->info.force_usb_charging))
 		&& battery->info.charging_enabled
 		&& gpio_get_value(pdata->charger.fullcharge_line) == 1)
 		p3_cable_charging(battery);
@@ -1505,11 +1665,17 @@ err_usb_psy_register:
 	power_supply_unregister(&battery->psy_battery);
 err_battery_psy_register:
 	destroy_workqueue(battery->p3_TA_workqueue);
+#ifdef CONFIG_TARGET_LOCALE_KOR
+	destroy_workqueue(battery->low_bat_comp_workqueue);
+#endif
 err_workqueue_init:
 	wake_lock_destroy(&battery->vbus_wake_lock);
 	wake_lock_destroy(&battery->work_wake_lock);
 	wake_lock_destroy(&battery->cable_wake_lock);
 	wake_lock_destroy(&battery->fullcharge_wake_lock);
+#ifdef CONFIG_TARGET_LOCALE_KOR
+	wake_lock_destroy(&battery->low_comp_wake_lock);
+#endif
 	mutex_destroy(&battery->work_lock);
 	kfree(battery);
 
@@ -1529,6 +1695,9 @@ static int __devexit p3_bat_remove(struct platform_device *pdev)
 	power_supply_unregister(&battery->psy_battery);
 
 	destroy_workqueue(battery->p3_TA_workqueue);
+#ifdef CONFIG_TARGET_LOCALE_KOR
+	destroy_workqueue(battery->low_bat_comp_workqueue);
+#endif
 	cancel_delayed_work(&battery->fuelgauge_work);
 	cancel_delayed_work(&battery->fullcharging_work);
 	cancel_delayed_work(&battery->full_comp_work);
@@ -1537,6 +1706,9 @@ static int __devexit p3_bat_remove(struct platform_device *pdev)
 	wake_lock_destroy(&battery->work_wake_lock);
 	wake_lock_destroy(&battery->cable_wake_lock);
 	wake_lock_destroy(&battery->fullcharge_wake_lock);
+#ifdef CONFIG_TARGET_LOCALE_KOR
+	wake_lock_destroy(&battery->low_comp_wake_lock);
+#endif
 	mutex_destroy(&battery->work_lock);
 
 	kfree(battery);

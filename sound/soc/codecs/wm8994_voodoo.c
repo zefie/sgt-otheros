@@ -24,7 +24,7 @@
 #endif
 #else
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35) && !defined(GALAXY_TAB)
-#include "../wm8994_samsung.h"
+#include "wm8994_samsung.h"
 #else
 #include "../wm8994.h"
 #endif
@@ -1703,16 +1703,10 @@ unsigned int voodoo_hook_wm8994_write(struct snd_soc_codec *codec_,
 		    && !(wm8994->codec_state & CALL_ACTIVE)) {
 
 			if (reg == WM8994_LEFT_OUTPUT_VOLUME)
-				value =
-				    (WM8994_HPOUT1_VU |
-				     WM8994_HPOUT1L_MUTE_N |
-				     hpvol(0));
+			        hp_level[0] = value & 0x003F;
 
 			if (reg == WM8994_RIGHT_OUTPUT_VOLUME)
-				value =
-				    (WM8994_HPOUT1_VU |
-				     WM8994_HPOUT1R_MUTE_N |
-				     hpvol(1));
+			        hp_level[1] = value & 0x003F;
 		}
 #endif
 

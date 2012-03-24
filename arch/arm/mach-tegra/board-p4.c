@@ -82,7 +82,11 @@
 #include "fuse.h"
 #include "wakeups-t2.h"
 #include <media/s5k5bbgx.h>
+#if !defined(CONFIG_MACH_SAMSUNG_P3_P7100)
 #include <media/s5k5ccgx.h>
+#else
+#include <media/imx073.h>
+#endif
 #ifdef CONFIG_SAMSUNG_LPM_MODE
 #include <linux/moduleparam.h>
 #endif
@@ -97,6 +101,10 @@
 
 #if defined(CONFIG_TDMB) || defined(CONFIG_TDMB_MODULE)
 #include <media/tdmb_plat.h>
+#endif
+
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+#include <linux/usb/f_accessory.h>
 #endif
 
 struct class *sec_class;
@@ -142,6 +150,9 @@ struct bootloader_message {
 static struct clk *wifi_32k_clk;
 static struct mxt_callbacks *charger_callbacks;
 
+/* to indicate REBOOT_MODE_RECOVERY */
+extern int reboot_mode;
+
 /*Check ADC value to select headset type*/
 extern s16 adc_get_value(u8 channel);
 extern s16 stmpe811_adc_get_value(u8 channel);
@@ -179,6 +190,7 @@ static int write_bootloader_message(char *cmd, int mode)
 	if (mode == REBOOT_MODE_RECOVERY) {
 		strcpy(bootmsg.command, "boot-recovery");
 #ifdef CONFIG_KERNEL_DEBUG_SEC
+		reboot_mode = REBOOT_MODE_RECOVERY;
 		kernel_sec_set_debug_level(KERNEL_SEC_DEBUG_LEVEL_LOW);
 #endif
 	}
@@ -429,6 +441,7 @@ static __initdata struct tegra_clk_init_table p3_clk_init_table[] = {
 	{ "pll_c",	"clk_m",	586000000,	true},
 	{ "pll_a",	NULL,		11289600,	true},
 	{ "pll_a_out0",	NULL,		11289600,	true},
+	{ "clk_dev1",   "pll_a_out0",   0,              true},
 	{ "i2s1",	"pll_a_out0",	11289600,	true},
 	{ "i2s2",	"pll_a_out0",	11289600,	true},
 	{ "audio",	"pll_a_out0",	11289600,	true},
@@ -532,6 +545,11 @@ static char *usb_functions_ums_acm_adb[] = {
 	"acm",
 	"adb",
 };
+static char *usb_functions_mtp_acm_adb[] = {
+      "mtp",
+      "acm",
+      "adb",
+};
 #else /* USE MCCI HOST DRIVER */
 /* kies mode */
 static char *usb_functions_acm_mtp[] = {
@@ -549,12 +567,25 @@ static char *usb_functions_acm_ums_adb[] = {
 static char *usb_functions_mtp[] = {
 	"mtp",
 };
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+/* accessory mode */
+static char *usb_functions_accessory[] = {
+	"accessory",
+};
+static char *usb_functions_accessory_adb[] = {
+	"accessory",
+	"adb",
+};
+#endif
 static char *usb_functions_all[] = {
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 /* soonyong.cho : Every function driver for samsung composite.
  *  		  Number of to enable function features have to be same as below.
  */
 #  ifdef CONFIG_USB_ANDROID_SAMSUNG_ESCAPE /* USE DEVGURU HOST DRIVER */
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+	"accessory",
+#endif	
 	"usb_mass_storage",
 	"acm",
 	"adb",
@@ -639,8 +670,8 @@ static struct android_usb_product usb_products[] = {
 #    else /* Not used KIES_UMS */
 	{
 		.product_id	= SAMSUNG_DEBUG_PRODUCT_ID,
-		.num_functions	= ARRAY_SIZE(usb_functions_ums_acm_adb),
-		.functions	= usb_functions_ums_acm_adb,
+                .num_functions  = ARRAY_SIZE(usb_functions_mtp_acm_adb),
+                .functions      = usb_functions_mtp_acm_adb,
 		.bDeviceClass	= 0xEF,
 		.bDeviceSubClass= 0x02,
 		.bDeviceProtocol= 0x01,
@@ -656,6 +687,8 @@ static struct android_usb_product usb_products[] = {
 		.bDeviceProtocol= 0x01,
 		.s		= ANDROID_KIES_CONFIG_STRING,
 		.mode		= USBSTATUS_SAMSUNG_KIES,
+		.multi_conf_functions[0] = usb_functions_mtp,
+		.multi_conf_functions[1] = usb_functions_mtp_acm,				
 	},
 	{
 		.product_id	= SAMSUNG_UMS_PRODUCT_ID,
@@ -667,6 +700,30 @@ static struct android_usb_product usb_products[] = {
 		.s		= ANDROID_UMS_CONFIG_STRING,
 		.mode		= USBSTATUS_UMS,
 	},
+#ifdef CONFIG_USB_ANDROID_ACCESSORY	
+	{
+		.vendor_id	= USB_ACCESSORY_VENDOR_ID,
+		.product_id	= USB_ACCESSORY_PRODUCT_ID,
+		.num_functions	= ARRAY_SIZE(usb_functions_accessory),
+		.functions	= usb_functions_accessory,
+		.bDeviceClass	= USB_CLASS_PER_INTERFACE,
+		.bDeviceSubClass= 0,
+		.bDeviceProtocol= 0,
+		.s		= ANDROID_ACCESSORY_CONFIG_STRING,
+		.mode		= USBSTATUS_ACCESSORY,
+	},	
+	{
+		.vendor_id	= USB_ACCESSORY_VENDOR_ID,
+		.product_id	= USB_ACCESSORY_PRODUCT_ID,
+		.num_functions	= ARRAY_SIZE(usb_functions_accessory_adb),
+		.functions	= usb_functions_accessory_adb,
+		.bDeviceClass	= USB_CLASS_PER_INTERFACE,
+		.bDeviceSubClass= 0,
+		.bDeviceProtocol= 0,
+		.s		= ANDROID_ACCESSORY_ADB_CONFIG_STRING,
+		.mode		= USBSTATUS_ACCESSORY,
+	},		
+#endif	
 	{
 		.product_id	= SAMSUNG_RNDIS_PRODUCT_ID,
 		.num_functions	= ARRAY_SIZE(usb_functions_rndis),
@@ -913,7 +970,7 @@ static const struct tegra_pingroup_config i2c2_gen2 = {
 static struct tegra_i2c_platform_data p3_i2c2_platform_data = {
 	.adapter_nr	= 1,
 	.bus_count	= 2,
-	.bus_clk_rate	= { 400000, 10000 },
+	.bus_clk_rate	= { 100000, 10000 },
 	.bus_mux	= { &i2c2_ddc, &i2c2_gen2 },
 	.bus_mux_len	= { 1, 1 },
 	.slave_addr = 0x00FC,
@@ -1140,7 +1197,7 @@ static void tegra_usb_ldo_en(int active, int instance)
 		return;
 	}
 
-	pr_info("Board P4 : %s=%d instance=%d present regulator=%d\n", 
+	pr_info("Board P4 : %s=%d instance=%d present regulator=%d\n",
 		 __func__, active, instance, usb_data.usb_regulator_on[instance]);
 	mutex_lock(&usb_data.ldo_en_lock);
 
@@ -1148,14 +1205,14 @@ static void tegra_usb_ldo_en(int active, int instance)
 		if (!usb_data.usb_regulator_on[instance]) {
 			do {
 				ret = regulator_enable(reg);
-				if (ret == 0) 
+				if (ret == 0)
 					break;
 				msleep(3);
 			} while(try_times--);
 			if (ret == 0)
 				usb_data.usb_regulator_on[instance] = 1;
 			else
-				pr_err("%s: failed to turn on \\
+				pr_err("%s: failed to turn on \
 					vdd_ldo6 regulator\n", __func__);
 		}
 	} else {
@@ -1163,7 +1220,7 @@ static void tegra_usb_ldo_en(int active, int instance)
 		usb_data.usb_regulator_on[instance] = 0;
 	}
 	regulator_put(reg);
-	
+
 	mutex_unlock(&usb_data.ldo_en_lock);
 }
 
@@ -1181,36 +1238,50 @@ static void tegra_otg_en(int active)
 void tegra_acc_power(u8 token, bool active)
 {
 	int gpio_acc_en;
+	int gpio_acc_5v;
+	int try_cnt = 0;
 	static bool enable = false;
 	static u8 acc_en_token = 0;
 
-#if 0
-	enum {
-		ACC_EN_TOKEN_1 = 0, /* keyboard */
-		ACC_EN_TOKEN_2,   	/* usb otg */
-		...
-		DVFS_LOCK_TOKEN_NUM
-	};
-#endif
 	gpio_acc_en = GPIO_ACCESSORY_EN;
+	gpio_acc_5v = GPIO_V_ACCESSORY_5V;
+
+	/*	token info
+		0 : force power off,
+		1 : usb otg
+		2 : ear jack
+		3 : keyboard
+	*/
 
 	if (active) {
 		acc_en_token |= (1 << token);
-
-		if (enable)
-			return ;
-
 		enable = true;
 		gpio_direction_output(gpio_acc_en, 1);
+		msleep(1);
+		while(!gpio_get_value(gpio_acc_5v)) {
+			gpio_direction_output(gpio_acc_en, 0);
+			msleep(10);
+			gpio_direction_output(gpio_acc_en, 1);
+			if (try_cnt > 30) {
+				pr_err("[acc] failed to enable the accessory_en");
+				break;
+			} else
+				try_cnt++;
+		}
 	} else {
-		acc_en_token &= ~(1 << token);
-
-		if (0 == acc_en_token) {
+		if (0 == token) {
 			gpio_direction_output(gpio_acc_en, 0);
 			enable = false;
+		} else {
+			acc_en_token &= ~(1 << token);
+			if (0 == acc_en_token) {
+				gpio_direction_output(gpio_acc_en, 0);
+				enable = false;
+			}
 		}
 	}
-	pr_info("Board P4 : %s token : %d, %s\n", __func__, token, enable ? "on" : "off");
+	pr_info("Board P4 : %s token : (%d,%d) %s\n", __func__,
+		token, active, enable ? "on" : "off");
 }
 
 static int p3_kbc_keycode[] = {
@@ -1363,6 +1434,24 @@ static struct p3_battery_platform_data p3_battery_platform = {
 	.check_dedicated_charger = check_samsung_charger,
 	.init_charger_gpio = p3_bat_gpio_init,
 	.inform_charger_connection = p3_inform_charger_connection,
+
+#ifdef CONFIG_TARGET_LOCALE_KOR
+	.temp_high_threshold = 60000,	/* 546 + 32 (dT) ->600 by kim2054's request*/
+	.temp_high_recovery = 42600,	/* 426 */
+	.temp_low_recovery = -1000,		/* -10 */
+	.temp_low_threshold = -4000,		/* -40 */
+	.charge_duration = 10*60*60,	/* 10 hour */
+	.recharge_duration = 2*60*60,	/* 2 hour */
+	.recharge_voltage = 4150,	/*4.15V */
+#elif CONFIG_MACH_SAMSUNG_P4TMO
+       .temp_high_threshold = 50000,   /* 50c */
+       .temp_high_recovery = 45000,    /* 45c */
+       .temp_low_recovery = 2000,              /* 2c */
+       .temp_low_threshold = 0,                /* 0c */
+       .charge_duration = 10*60*60,    /* 10 hour */
+       .recharge_duration = 1.5*60*60, /* 1.5 hour */
+       .recharge_voltage = 4150,       /*4.15V */
+#else
 	.temp_high_threshold = 50000,	/* 50c */
 	.temp_high_recovery = 42000,	/* 42c */
 	.temp_low_recovery = 2000,		/* 2c */
@@ -1370,6 +1459,7 @@ static struct p3_battery_platform_data p3_battery_platform = {
 	.charge_duration = 10*60*60,	/* 10 hour */
 	.recharge_duration = 1.5*60*60,	/* 1.5 hour */
 	.recharge_voltage = 4150,	/*4.15V */
+#endif
 };
 
 static struct platform_device p3_battery_device = {
@@ -1432,8 +1522,23 @@ static struct uart_platform_data uart_pdata {
 };
 
 #else
+static int dock_wakeup(void)
+{
+        unsigned long status =
+               readl(IO_ADDRESS(TEGRA_PMC_BASE) + PMC_WAKE_STATUS);
+
+       if (status & TEGRA_WAKE_GPIO_PI5) {
+                writel(TEGRA_WAKE_GPIO_PI5,
+                       IO_ADDRESS(TEGRA_PMC_BASE) + PMC_WAKE_STATUS);
+       }
+
+       return status & TEGRA_WAKE_GPIO_PI5 ? KEY_WAKEUP : KEY_RESERVED;
+}
+
 static struct dock_keyboard_platform_data kbd_pdata = {
 	.acc_power = tegra_acc_power,
+	.wakeup_key = dock_wakeup,
+	.accessory_irq_gpio = GPIO_ACCESSORY_INT,
 };
 
 static struct platform_device sec_keyboard = {
@@ -1472,6 +1577,17 @@ static struct sec_jack_zone sec_jack_zones[] = {
 		.check_count = 10,
 		.jack_type = SEC_HEADSET_4POLE,
 	},
+#ifdef CONFIG_TARGET_LOCALE_KOR	
+	{
+		/* 2000 < adc <= 3800, 4 pole zone */
+		// as following new schemetics, margin is gone to 3800 instead of 3700
+		// 2011.05.26 by Rami Jung
+		.adc_high = 3800,
+		.delay_ms = 20,
+		.check_count = 5,
+		.jack_type = SEC_HEADSET_4POLE,
+	},
+#else
 	{
 		/* 2000 < adc <= 3800, 4 pole zone */
 		// as following new schemetics, margin is gone to 3800 instead of 3700
@@ -1481,6 +1597,8 @@ static struct sec_jack_zone sec_jack_zones[] = {
 		.check_count = 0,
 		.jack_type = SEC_HEADSET_4POLE,
 	},
+#endif
+
 	{
 		/* adc > 3800, unstable zone, default to 3pole if it stays
 		 * in this range for a second (10ms delays, 100 samples)
@@ -1493,8 +1611,8 @@ static struct sec_jack_zone sec_jack_zones[] = {
 };
 
 
-// 2011.05.04 by Rami.Jung 
-// To support 3-buttons earjack 
+// 2011.05.04 by Rami.Jung
+// To support 3-buttons earjack
 static struct sec_jack_buttons_zone sec_jack_buttons_zones[] = {
 	{
 		/* 0 <= adc <=180, stable zone */
@@ -1524,7 +1642,7 @@ static int sec_jack_get_adc_value(void)
 	else
 		ret = stmpe811_adc_get_value(4);
 	printk(KERN_DEBUG
-		"Board P3 : Enterring sec_jack_get_adc_value = %d\n", ret);
+		"Board P4 : Enterring sec_jack_get_adc_value = %d\n", ret);
 	return  ret;
 }
 
@@ -1563,7 +1681,6 @@ struct platform_device sec_device_connector = {
 #endif
 
 static struct platform_device *p3_devices[] __initdata = {
-	&androidusb_device,
 #ifdef CONFIG_USB_ANDROID_RNDIS
 	&s3c_device_rndis,
 #endif
@@ -1571,7 +1688,6 @@ static struct platform_device *p3_devices[] __initdata = {
 	&tegra_uarta_device,
 	&tegra_btuart_device,
 	&pmu_device,
-	&tegra_udc_device,
 	&tegra_gart_device,
 	&tegra_aes_device,
 	&p3_keys_device,
@@ -1594,7 +1710,7 @@ static struct platform_device *p3_devices[] __initdata = {
 #if defined(CONFIG_TDMB) || defined(CONFIG_TDMB_MODULE)
 	&tegra_spi_device3,
 #endif
-	
+
 };
 
 static void p3_keys_init(void)
@@ -1622,6 +1738,7 @@ static void p3_touch_init_hw(void)
 	tegra_gpio_enable(GPIO_TOUCH_INT);
 }
 
+#if !defined(CONFIG_MACH_SAMSUNG_P3_P7100)
 static void sec_s5k5ccgx_init(void)
 {
 	printk("%s,, \n",__func__);
@@ -1677,6 +1794,40 @@ static void sec_s5k5ccgx_init(void)
 	printk("<=PCAM=> LOW 4: %d\n",	gpio_get_value(GPIO_CAM_PMIC_EN4));
 #endif
 }
+#else
+static void sec_imx073_init(void)
+{
+        tegra_gpio_enable(GPIO_CAM_PMIC_EN1);
+        tegra_gpio_enable(GPIO_CAM_PMIC_EN2);
+        tegra_gpio_enable(GPIO_CAM_PMIC_EN3);
+        tegra_gpio_enable(GPIO_CAM_PMIC_EN4);
+        tegra_gpio_enable(GPIO_CAM_PMIC_EN5);
+        tegra_gpio_enable(GPIO_CAM_L_nRST);
+        tegra_gpio_enable(GPIO_CAM_F_nRST);
+        tegra_gpio_enable(GPIO_CAM_F_STANDBY);
+        tegra_gpio_enable(GPIO_ISP_INT);
+
+        gpio_request(GPIO_CAM_PMIC_EN1, "CAMERA_PMIC_EN1");
+        gpio_request(GPIO_CAM_PMIC_EN2, "CAMERA_PMIC_EN2");
+        gpio_request(GPIO_CAM_PMIC_EN3, "CAMERA_PMIC_EN3");
+        gpio_request(GPIO_CAM_PMIC_EN4, "CAMERA_PMIC_EN4");
+        gpio_request(GPIO_CAM_PMIC_EN5, "CAMERA_PMIC_EN5");
+        gpio_request(GPIO_CAM_L_nRST, "CAMERA_CAM_Left_nRST");
+        gpio_request(GPIO_CAM_F_nRST, "CAMERA_CAM_Front_nRST");
+        gpio_request(GPIO_CAM_F_STANDBY, "CAMERA_CAM_Front_STANDBY");
+        gpio_request(GPIO_ISP_INT, "ISP_INT");
+
+        gpio_direction_output(GPIO_CAM_PMIC_EN1, 0);
+        gpio_direction_output(GPIO_CAM_PMIC_EN2, 0);
+        gpio_direction_output(GPIO_CAM_PMIC_EN3, 0);
+        gpio_direction_output(GPIO_CAM_PMIC_EN4, 0);
+        gpio_direction_output(GPIO_CAM_PMIC_EN5, 0);
+        gpio_direction_output(GPIO_CAM_L_nRST, 0);
+        gpio_direction_output(GPIO_CAM_F_nRST, 0);
+        gpio_direction_output(GPIO_CAM_F_STANDBY, 0);
+        gpio_direction_input(GPIO_ISP_INT);
+}
+#endif
 
 struct tegra_pingroup_config mclk = {
 	TEGRA_PINGROUP_CSUS,
@@ -1698,6 +1849,7 @@ static void P3_s5k5ccgx_flash_off()
 	gpio_set_value(GPIO_CAM_FLASH_SET, 0);
 }*/
 
+#if !defined(CONFIG_MACH_SAMSUNG_P3_P7100)
 static void p3_s5k5ccgx_power_on()
 {
 	printk("%s,, \n",__func__);
@@ -1729,7 +1881,35 @@ static void p3_s5k5ccgx_power_on()
 	gpio_set_value(GPIO_CAM_R_nRST, 1); //3M nRST high
 	msleep(10);
 }
+#else
+static void p3_imx073_power_on(void)
+{
+        gpio_set_value(GPIO_CAM_PMIC_EN1, 1);
+        usleep_range(900, 1000);
+        gpio_set_value(GPIO_CAM_PMIC_EN2, 1);
+        usleep_range(900, 1000);
+        if (system_rev >= 0x7) {
+                gpio_set_value(GPIO_CAM_PMIC_EN4, 1);
+                usleep_range(900, 1000);
+                gpio_set_value(GPIO_CAM_PMIC_EN3, 1);
+        } else {
+                gpio_set_value(GPIO_CAM_PMIC_EN3, 1);
+                usleep_range(900, 1000);
+                gpio_set_value(GPIO_CAM_PMIC_EN4, 1);
+        }
+        usleep_range(900, 1000);
+        gpio_set_value(GPIO_CAM_PMIC_EN5, 1);
 
+        udelay(100);
+        tegra_pinmux_set_func(&mclk);
+        tegra_pinmux_set_tristate(TEGRA_PINGROUP_CSUS, TEGRA_TRI_NORMAL);
+        udelay(10);
+        gpio_set_value(GPIO_CAM_L_nRST, 1);
+        usleep_range(3000, 10000);
+}
+#endif
+
+#if !defined(CONFIG_MACH_SAMSUNG_P3_P7100)
 static void p3_s5k5ccgx_power_off()
 {
 	printk("%s,, \n",__func__);
@@ -1754,10 +1934,52 @@ static void p3_s5k5ccgx_power_off()
 		msleep(800);
 	else
 	{
-		msleep(200);	
-		printk("p3_s5k5ccgx_power_off       msleep--------200ms  system_rev = %d\n", system_rev);		
+		msleep(200);
+		printk("p3_s5k5ccgx_power_off       msleep--------200ms  system_rev = %d\n", system_rev);
 	}
 }
+#else
+static void p3_imx073_power_off(void)
+{
+        usleep_range(3000, 10000);
+        gpio_set_value(GPIO_CAM_L_nRST, 0);
+        udelay(10);
+        tegra_pinmux_set_tristate(TEGRA_PINGROUP_CSUS, TEGRA_TRI_TRISTATE);
+        udelay(50);
+        gpio_set_value(GPIO_CAM_PMIC_EN5, 0);
+        usleep_range(900, 1000);
+        if (system_rev >= 0x7) {
+                gpio_set_value(GPIO_CAM_PMIC_EN3, 0);
+                msleep(40);
+                gpio_set_value(GPIO_CAM_PMIC_EN4, 0);
+        } else {
+                gpio_set_value(GPIO_CAM_PMIC_EN4, 0);
+                msleep(40);
+                gpio_set_value(GPIO_CAM_PMIC_EN3, 0);
+        }
+        usleep_range(900, 1000);
+        gpio_set_value(GPIO_CAM_PMIC_EN2, 0);
+        msleep(40);
+        gpio_set_value(GPIO_CAM_PMIC_EN1, 0);
+}
+
+static unsigned int p3_imx073_isp_int_read(void)
+{
+        return gpio_get_value(GPIO_ISP_INT);
+}
+struct imx073_platform_data p3_imx073_data = {
+        .power_on = p3_imx073_power_on,
+        .power_off = p3_imx073_power_off,
+        .isp_int_read = p3_imx073_isp_int_read
+};
+
+static const struct i2c_board_info sec_imx073_camera[] = {
+        {
+                I2C_BOARD_INFO("imx073", 0x3E>>1),
+                .platform_data = &p3_imx073_data,
+        },
+};
+#endif
 
 #define FLASH_MOVIE_MODE_CURRENT_100_PERCENT	1
 #define FLASH_MOVIE_MODE_CURRENT_79_PERCENT	3
@@ -1768,6 +1990,7 @@ static void p3_s5k5ccgx_power_off()
 #define FLASH_TIME_LATCH_US			500
 #define FLASH_TIME_EN_SET_US			1
 
+#if !defined(CONFIG_MACH_SAMSUNG_P3_P7100)
 /* The AAT1274 uses a single wire interface to write data to its
  * control registers. An incoming value is written by sending a number
  * of rising edges to EN_SET. Data is 4 bits, or 1-16 pulses, and
@@ -1799,7 +2022,7 @@ static int P3_s5k5ccgx_af_assist(int enable)
 	/* Turn assist light on or off by asserting a value on the EN_SET
 	 * line. The default illumination level of 1/7.3 at 100% is used */
 	printk("========== flash af_assist =========== %d \n", enable);
-#if 0	
+#if 0
 	gpio_set_value(GPIO_CAM_FLASH_EN, enable);
 	if (enable) {
 		udelay(100);
@@ -1847,6 +2070,7 @@ static const struct i2c_board_info sec_s5k5ccgx_camera[] = {
 		.platform_data = &p3_s5k5ccgx_data,
 	},
 };
+#endif
 
 struct tegra_pingroup_config s5k5bbgx_mclk = {
 	TEGRA_PINGROUP_CSUS, TEGRA_MUX_VI_SENSOR_CLK,
@@ -1855,6 +2079,7 @@ struct tegra_pingroup_config s5k5bbgx_mclk = {
 
 void p3_s5k5bbgx_power_on(void)
 {
+#if !defined(CONFIG_MACH_SAMSUNG_P3_P7100)
 	printk("%s,, \n",__func__);
 	gpio_set_value(GPIO_CAM_R_nSTBY, 0); //3M STBY low
 	gpio_set_value(GPIO_CAM_R_nRST, 0); //3M nRST low
@@ -1883,10 +2108,44 @@ void p3_s5k5bbgx_power_on(void)
 
 	gpio_set_value(GPIO_CAM_F_nRST, 1); // 2M nRST High
 	msleep(10); //udelay(200);
+#else
+        gpio_set_value(GPIO_CAM_PMIC_EN1, 1);
+        usleep_range(1000, 2000);
+        gpio_set_value(GPIO_CAM_PMIC_EN2, 1);
+        usleep_range(1000, 2000);
+        if (system_rev >= 0x7) {
+                gpio_set_value(GPIO_CAM_PMIC_EN4, 1);
+                usleep_range(1000, 2000);
+                gpio_set_value(GPIO_CAM_PMIC_EN3, 1);
+        } else {
+                gpio_set_value(GPIO_CAM_PMIC_EN3, 1);
+                usleep_range(1000, 2000);
+                gpio_set_value(GPIO_CAM_PMIC_EN4, 1);
+        }
+        usleep_range(1000, 2000);
+        gpio_set_value(GPIO_CAM_PMIC_EN5, 1);
+
+        udelay(100);
+
+        tegra_pinmux_set_func(&s5k5bbgx_mclk);
+        tegra_pinmux_set_tristate(TEGRA_PINGROUP_CSUS, TEGRA_TRI_NORMAL);
+
+        udelay(10);
+
+        gpio_set_value(GPIO_CAM_F_STANDBY, 1);
+        udelay(20);
+
+        gpio_set_value(GPIO_CAM_F_nRST, 1);
+        udelay(10);
+
+        gpio_set_value(GPIO_CAM_PMIC_EN2, 0);
+        usleep_range(3000, 5000);
+#endif
 }
 
 void p3_s5k5bbgx_power_off(void)
 {
+#if !defined(CONFIG_MACH_SAMSUNG_P3_P7100)
 	msleep(3);
 	gpio_set_value(GPIO_CAM_F_nRST, 0); // 2M nRST Low
 	udelay(100);
@@ -1907,7 +2166,33 @@ void p3_s5k5bbgx_power_off(void)
 	if (system_rev < 14)
 		msleep(800);
 	else
-		msleep(200);	
+		msleep(200);
+#else
+        usleep_range(3000, 5000);
+        gpio_set_value(GPIO_CAM_F_nRST, 0);
+        udelay(10);
+
+        gpio_set_value(GPIO_CAM_F_STANDBY, 0);
+        udelay(10);
+        tegra_pinmux_set_tristate(TEGRA_PINGROUP_CSUS, TEGRA_TRI_TRISTATE);
+        udelay(50);
+
+        gpio_set_value(GPIO_CAM_PMIC_EN5, 0);
+        usleep_range(1000, 2000);
+        if (system_rev >= 0x7) {
+                gpio_set_value(GPIO_CAM_PMIC_EN3, 0);
+                msleep(500);
+                gpio_set_value(GPIO_CAM_PMIC_EN4, 0);
+        } else {
+                gpio_set_value(GPIO_CAM_PMIC_EN4, 0);
+                msleep(500);
+                gpio_set_value(GPIO_CAM_PMIC_EN3, 0);
+        }
+        usleep_range(1000, 2000);
+        gpio_set_value(GPIO_CAM_PMIC_EN2, 0);
+        usleep_range(1000, 2000);
+        gpio_set_value(GPIO_CAM_PMIC_EN1, 0);
+#endif
 }
 
 struct s5k5bbgx_platform_data p3_s5k5bbgx_data = {
@@ -1925,13 +2210,21 @@ static const struct i2c_board_info sec_s5k5bbgx_camera[] = {
 static int __init p3_camera_init(void)
 {
 	int status;
+#if !defined(CONFIG_MACH_SAMSUNG_P3_P7100)
 	sec_s5k5ccgx_init();
 	status = i2c_register_board_info(3, sec_s5k5ccgx_camera,
 				ARRAY_SIZE(sec_s5k5ccgx_camera));
 	status = i2c_register_board_info(3, sec_s5k5bbgx_camera,
 				ARRAY_SIZE(sec_s5k5bbgx_camera));
+#else
+        sec_imx073_init();
+        status = i2c_register_board_info(3, sec_imx073_camera,
+                                ARRAY_SIZE(sec_imx073_camera));
+        status = i2c_register_board_info(3, sec_s5k5bbgx_camera,
+                                ARRAY_SIZE(sec_s5k5bbgx_camera));
+#endif
 
-	return 0;
+        return 0;
 }
 
 static void p3_touch_exit_hw(void)
@@ -1969,8 +2262,8 @@ static void p3_register_touch_callbacks(struct mxt_callbacks *cb)
 
 static struct mxt_platform_data p3_touch_platform_data = {
 	.numtouch = 10,
-	.max_x  = 1280,
-	.max_y  = 800,
+	.max_x  = 1279,
+	.max_y  = 799,
 	.init_platform_hw  = p3_touch_init_hw,
 	.exit_platform_hw  = p3_touch_exit_hw,
 	.suspend_platform_hw = p3_touch_suspend_hw,
@@ -2035,8 +2328,8 @@ static struct mxt_platform_data p3_touch_platform_data = {
 	 /* Atmel 20 -> 5 -> 50 (To avoid One finger Pinch Zoom) */
 	.touchscreen_config.mrgthr = 50,
 	.touchscreen_config.amphyst = 10,
-	.touchscreen_config.xrange = 800,
-	.touchscreen_config.yrange = 1280,
+	.touchscreen_config.xrange = 799,
+	.touchscreen_config.yrange = 1279,
 	.touchscreen_config.xloclip = 0,
 	.touchscreen_config.xhiclip = 0,
 	.touchscreen_config.yloclip = 0,
@@ -2050,7 +2343,7 @@ static struct mxt_platform_data p3_touch_platform_data = {
 	.touchscreen_config.xpitch = 1,
 	.touchscreen_config.ypitch = 3,
 	/*noise_suppression_config*/
-	.noise_suppression_config.ctrl = 5,
+	.noise_suppression_config.ctrl = 0x87,
 	.noise_suppression_config.reserved = 0,
 	.noise_suppression_config.reserved1 = 0,
 	.noise_suppression_config.reserved2 = 0,
@@ -2091,10 +2384,32 @@ static struct mxt_platform_data p3_touch_platform_data = {
 	.palmsupression_config.supextto = 5,
 	/*config change for ta connected*/
 	.tchthr_for_ta_connect = 80,
-	.tchdi_for_ta_connect = 2,
 	.noisethr_for_ta_connect = 55,
 	.idlegcafdepth_ta_connect = 32,
-	.actvgcafdepth_ta_connect = 63,
+        .freq_for_ta_connect[0] = 45,
+        .freq_for_ta_connect[1] = 49,
+        .freq_for_ta_connect[2] = 55,
+        .freq_for_ta_connect[3] = 59,
+        .freq_for_ta_connect[4] = 63,
+        .fherr_cnt = 0,
+        .tch_blen_for_fherr = 0,
+        .tchthr_for_fherr = 35,
+        .noisethr_for_fherr = 30,
+        .freq_for_fherr1[0] = 45,
+        .freq_for_fherr1[1] = 49,
+        .freq_for_fherr1[2] = 55,
+        .freq_for_fherr1[3] = 59,
+        .freq_for_fherr1[4] = 63,
+        .freq_for_fherr2[0] = 10,
+        .freq_for_fherr2[1] = 12,
+        .freq_for_fherr2[2] = 18,
+        .freq_for_fherr2[3] = 40,
+        .freq_for_fherr2[4] = 72,
+        .freq_for_fherr3[0] = 7,
+        .freq_for_fherr3[1] = 33,
+        .freq_for_fherr3[2] = 39,
+        .freq_for_fherr3[3] = 52,
+        .freq_for_fherr3[4] = 64,
 #ifdef MXT_CALIBRATE_WORKAROUND
 	/*autocal config at idle status*/
 	.atchcalst_idle = 9,
@@ -2126,7 +2441,9 @@ static int __init p3_touch_init(void)
 static struct usb_phy_plat_data tegra_usb_phy_pdata[] = {
 	[0] = {
 			.instance = 0,
-//			.vbus_irq = TPS6586X_INT_BASE + TPS6586X_INT_USB_DET,
+#if defined(CONFIG_MACH_SAMSUNG_P3_P7100)
+			.vbus_irq = TPS6586X_INT_BASE + TPS6586X_INT_USB_DET,
+#endif
 			.vbus_gpio = -1,
 			.usb_ldo_en = tegra_usb_ldo_en,
 	},
@@ -2148,14 +2465,12 @@ static struct tegra_ehci_platform_data tegra_ehci_pdata[] = {
 		.power_down_on_bus_suspend = 0,
 		.host_notify = 1,
 		.sec_whlist_table_num = 1,
-/* Don't merge with P3
-		.currentlimit_irq = TEGRA_GPIO_TO_IRQ(GPIO_V_ACCESSORY_5V),
-*/
 	},
 	[1] = {
 		.phy_config = &hsic_phy_config,
 		.operating_mode = TEGRA_USB_HOST,
 		.power_down_on_bus_suspend = 1,
+		.phy_type = TEGRA_USB_PHY_TYPE_LINK_ULPI,
 	},
 	[2] = {
 		.phy_config = &utmi_phy_config[1],
@@ -2217,7 +2532,9 @@ static struct tegra_otg_platform_data tegra_otg_pdata = {
 	.host_register = &tegra_usb_otg_host_register,
 	.host_unregister = &tegra_usb_otg_host_unregister,
 	.otg_en = tegra_otg_en,
+#if !defined(CONFIG_MACH_SAMSUNG_P3_P7100)
 	.currentlimit_irq = TEGRA_GPIO_TO_IRQ(GPIO_V_ACCESSORY_5V),
+#endif
 };
 
 static void p3_usb_init(void)
@@ -2261,17 +2578,12 @@ static void p3_usb_init(void)
 
 	tegra_usb_phy_init(tegra_usb_phy_pdata, ARRAY_SIZE(tegra_usb_phy_pdata));
 
+	/* OTG should be the first to be registered */
 	tegra_otg_device.dev.platform_data = &tegra_otg_pdata;
 	platform_device_register(&tegra_otg_device);
-#ifdef CONFIG_SAMSUNG_LPM_MODE
-	if (!charging_mode_from_boot) {
-		tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
-		platform_device_register(&tegra_ehci2_device);
-	}
-#else
-	tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
-	platform_device_register(&tegra_ehci2_device);
-#endif
+
+        platform_device_register(&androidusb_device);
+        platform_device_register(&tegra_udc_device);
 
 #if 0 /* TODO: USB team must verify */
 	/* create a fake MAC address from our serial number.
@@ -2285,6 +2597,26 @@ static void p3_usb_init(void)
 	}
 #endif
 }
+
+#if defined(CONFIG_SEC_MODEM)
+static int __init p3_hsic_init(void)
+{
+#ifdef CONFIG_SAMSUNG_LPM_MODE
+        int ret = 0;
+        if (!charging_mode_from_boot) {
+                register_smd_resource();
+                tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
+                ret = platform_device_register(&tegra_ehci2_device);
+        }
+        return ret;
+#else
+        register_smd_resource();
+        tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
+        return platform_device_register(&tegra_ehci2_device);
+#endif
+}
+late_initcall(p3_hsic_init);
+#endif
 
 static void p3_wlan_gpio_unconfig(void)
 {
@@ -2325,6 +2657,26 @@ void p3_wlan_gpio_disable(void)
 }
 EXPORT_SYMBOL(p3_wlan_gpio_disable);
 
+void p3_wlan_reset_enable(void)
+{
+        printk(KERN_DEBUG "wlan reset enable OK\n");
+        gpio_set_value(GPIO_WLAN_EN, 1);
+        mdelay(100);
+        printk(KERN_DEBUG "wlan get value  (%d)\n",
+        gpio_get_value(GPIO_WLAN_EN));
+}
+EXPORT_SYMBOL(p3_wlan_reset_enable);
+
+void p3_wlan_reset_disable(void)
+{
+        printk(KERN_DEBUG "wlan reset disable OK\n");
+        gpio_set_value(GPIO_WLAN_EN, 0);
+        mdelay(100);
+        printk(KERN_DEBUG "wlan get value  (%d)\n",
+        gpio_get_value(GPIO_WLAN_EN));
+
+}
+EXPORT_SYMBOL(p3_wlan_reset_disable);
 
 int	is_JIG_ON_high()
 {
@@ -2402,6 +2754,20 @@ static int __init p3_gps_init(void)
 static void p3_power_off(void)
 {
 	int ret;
+        u32 value;
+
+        /* control modem power off before pmic control */
+        gpio_set_value(GPIO_RESET_REQ_N, 0);
+        udelay(500);    /* min 300us */
+        gpio_set_value(GPIO_CP_RST, 0);
+        gpio_set_value(GPIO_CP_ON, 0);
+        mdelay(50);
+
+        value = gpio_get_value(GPIO_TA_nCONNECTED);
+        if (!value) {
+                pr_info("%s: TA_nCONNECTED! Reset!\n", __func__);
+                tps6586x_soft_rst();
+        }
 
 	ret = tps6586x_power_off();
 	if (ret)
@@ -2409,7 +2775,6 @@ static void p3_power_off(void)
 
 	while (1)
 		;
-
 }
 
 static void __init p3_power_off_init(void)
@@ -2530,10 +2895,10 @@ static void tdmb_gpio_on(void)
 {
 	printk("tdmb_gpio_on\n");
 
-	gpio_request(GPIO_TDMB_EN, "TDMB_EN");
-	gpio_direction_output(GPIO_TDMB_EN, 0);
-	gpio_request(GPIO_TDMB_RST, "TDMB_RST");
-	gpio_direction_output(GPIO_TDMB_RST, 0);
+        tegra_gpio_disable(GPIO_TDMB_SPI_CS);
+        tegra_gpio_disable(GPIO_TDMB_SPI_CLK);
+        tegra_gpio_disable(GPIO_TDMB_SPI_MOSI);
+        tegra_gpio_disable(GPIO_TDMB_SPI_MISO);
 
 	gpio_set_value(GPIO_TDMB_EN, 1);
 	msleep(10);
@@ -2541,9 +2906,6 @@ static void tdmb_gpio_on(void)
 	msleep(2);
 	gpio_set_value(GPIO_TDMB_RST, 1);
 	msleep(10);
-
-	gpio_request(GPIO_TDMB_INT, "TDMB_INT");
-	gpio_direction_input(GPIO_TDMB_INT);
 }
 
 static void tdmb_gpio_off(void)
@@ -2554,9 +2916,14 @@ static void tdmb_gpio_off(void)
 	msleep(1);
 	gpio_set_value(GPIO_TDMB_EN, 0);
 
-	gpio_free(GPIO_TDMB_RST);
-	gpio_free(GPIO_TDMB_EN);
-	gpio_free(GPIO_TDMB_INT);
+        tegra_gpio_enable(GPIO_TDMB_SPI_CS);
+        tegra_gpio_enable(GPIO_TDMB_SPI_CLK);
+        tegra_gpio_enable(GPIO_TDMB_SPI_MOSI);
+        tegra_gpio_enable(GPIO_TDMB_SPI_MISO);
+        gpio_set_value(GPIO_TDMB_SPI_CS, 0);
+        gpio_set_value(GPIO_TDMB_SPI_CLK, 0);
+        gpio_set_value(GPIO_TDMB_SPI_MOSI, 0);
+        gpio_set_value(GPIO_TDMB_SPI_MISO, 0);
 }
 
 static struct tdmb_platform_data tdmb_pdata = {
@@ -2605,12 +2972,12 @@ static int __init p4_dmb_init(void)
 	tegra_gpio_enable(GPIO_TDMB_EN);
 	tegra_gpio_enable(GPIO_TDMB_INT);
 
-        /* reserved for TDMB SPI */
-        tegra_gpio_disable(TEGRA_GPIO_PA6);
-        tegra_gpio_disable(TEGRA_GPIO_PB7);
-        tegra_gpio_disable(TEGRA_GPIO_PB6);
-        tegra_gpio_disable(TEGRA_GPIO_PB5);
-
+	gpio_request(GPIO_TDMB_EN, "TDMB_EN");
+	gpio_direction_output(GPIO_TDMB_EN, 0);
+	gpio_request(GPIO_TDMB_RST, "TDMB_RST");
+	gpio_direction_output(GPIO_TDMB_RST, 0);
+	gpio_request(GPIO_TDMB_INT, "TDMB_INT");
+	gpio_direction_input(GPIO_TDMB_INT);
 
 	platform_device_register(&tdmb_device);
 
@@ -2667,12 +3034,6 @@ static void __init tegra_p3_init(void)
 	p3_touch_init();
 #endif
 	p3_keys_init();
-#ifdef CONFIG_SAMSUNG_LPM_MODE
-	if (!charging_mode_from_boot)
-		register_smd_resource();
-#else
-	register_smd_resource();
-#endif
 	p3_usb_init();
 	p3_gps_init();
 	p3_panel_init();
@@ -2709,6 +3070,18 @@ static void __init tegra_p3_init(void)
 #endif
 }
 
+#ifdef CONFIG_TARGET_LOCALE_KOR
+MACHINE_START(SAMSUNG_P3, MODELNAME)
+    .boot_params    = 0x00000100,
+    .phys_io        = IO_APB_PHYS,
+    .io_pg_offst    = ((IO_APB_VIRT) >> 18) & 0xfffc,
+    .init_irq       = tegra_init_irq,
+    .init_machine   = tegra_p3_init,
+    .map_io         = tegra_map_common_io,
+    .reserve        = p3_reserve,
+    .timer          = &tegra_timer,
+MACHINE_END
+#else
 MACHINE_START(SAMSUNG_P3, "p3")
 	.boot_params    = 0x00000100,
 	.phys_io        = IO_APB_PHYS,
@@ -2719,3 +3092,4 @@ MACHINE_START(SAMSUNG_P3, "p3")
 	.reserve        = p3_reserve,
 	.timer          = &tegra_timer,
 MACHINE_END
+#endif

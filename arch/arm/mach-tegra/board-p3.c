@@ -245,11 +245,11 @@ static int write_bootloader_message(char *cmd, int mode)
 static void write_bootloader_mode(char boot_mode)
 {
 	void __iomem *to_io;
-
+#if 0
 	to_io = ioremap(BOOT_MODE_P_ADDR, 4);
 	writel((unsigned long)boot_mode, to_io);
 	iounmap(to_io);
-
+#endif
 	/* Write a magic value to a 2nd memory location to distinguish between a
 	 * cold boot and a reboot.
 	 */

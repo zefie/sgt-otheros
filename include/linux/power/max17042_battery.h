@@ -55,7 +55,11 @@
 
 #define LOW_BATT_COMP_RANGE_NUM	5
 #define LOW_BATT_COMP_LEVEL_NUM	2
+#ifdef CONFIG_TARGET_LOCALE_KOR
+#define MAX_LOW_BATT_CHECK_CNT	12
+#else
 #define MAX_LOW_BATT_CHECK_CNT	2
+#endif
 #define MAX17042_CURRENT_UNIT	15625 / 100000
 
 struct max17042_platform_data {
@@ -98,10 +102,16 @@ struct max17042_chip {
 	struct max17042_platform_data	*pdata;
 	struct fuelgauge_info	info;
 	struct mutex			fg_lock;
+#ifdef CONFIG_TARGET_LOCALE_KOR
+	int pre_cond_ok;
+	int low_comp_pre_cond;
+#endif
 };
 
 /* SDI type low battery compensation offset */
-#ifdef CONFIG_MACH_SAMSUNG_P3
+#if defined(CONFIG_MACH_SAMSUNG_P3) || defined(CONFIG_MACH_SAMSUNG_P3_P7100)
+#define SDI_Range5_1_Offset		3369
+#define SDI_Range5_3_Offset		3469
 #define SDI_Range4_1_Offset		3369
 #define SDI_Range4_3_Offset		3469
 #define SDI_Range3_1_Offset		3453
@@ -111,6 +121,8 @@ struct max17042_chip {
 #define SDI_Range1_1_Offset		3438
 #define SDI_Range1_3_Offset		3590
 
+#define SDI_Range5_1_Slope		0
+#define SDI_Range5_3_Slope		0
 #define SDI_Range4_1_Slope		0
 #define SDI_Range4_3_Slope		0
 #define SDI_Range3_1_Slope		60
@@ -121,21 +133,25 @@ struct max17042_chip {
 #define SDI_Range1_3_Slope		0
 
 #elif defined(CONFIG_MACH_SAMSUNG_P4) || defined(CONFIG_MACH_SAMSUNG_P4WIFI) ||\
-	defined(CONFIG_MACH_SAMSUNG_P4LTE)
-#define SDI_Range4_1_Offset		3371
-#define SDI_Range4_3_Offset		3478
+	defined(CONFIG_MACH_SAMSUNG_P4LTE) && !defined(CONFIG_MACH_SAMSUNG_P3_P7100)
+#define SDI_Range5_1_Offset		3318
+#define SDI_Range5_3_Offset		3383
+#define SDI_Range4_1_Offset		3451
+#define SDI_Range4_3_Offset		3618
 #define SDI_Range3_1_Offset		3453
-#define SDI_Range3_3_Offset		3614
+#define SDI_Range3_3_Offset		3615
 #define SDI_Range2_1_Offset		3447
 #define SDI_Range2_3_Offset		3606
 #define SDI_Range1_1_Offset		3438
 #define SDI_Range1_3_Offset		3591
 
-#define SDI_Range4_1_Slope		0
-#define SDI_Range4_3_Slope		0
-#define SDI_Range3_1_Slope		50
-#define SDI_Range3_3_Slope		90
-#define SDI_Range2_1_Slope		50
+#define SDI_Range5_1_Slope		0
+#define SDI_Range5_3_Slope		0
+#define SDI_Range4_1_Slope		53
+#define SDI_Range4_3_Slope		94
+#define SDI_Range3_1_Slope		54
+#define SDI_Range3_3_Slope		92
+#define SDI_Range2_1_Slope		45
 #define SDI_Range2_3_Slope		78
 #define SDI_Range1_1_Slope		0
 #define SDI_Range1_3_Slope		0
@@ -146,27 +162,33 @@ struct max17042_chip {
 //Range3 : current consumption is between 0.6A ~ 1.5A
 //Range2 : current consumption is between 0.2A ~ 0.6A
 //Range1 : current consumption is less than 0.2A
-//11.05.12 update
-#define SDI_Range4_1_Offset		3361
-#define SDI_Range4_3_Offset		3448
-#define SDI_Range3_1_Offset		3438
-#define SDI_Range3_3_Offset		3634
-#define SDI_Range2_1_Offset		3459
-#define SDI_Range2_3_Offset		3606
-#define SDI_Range1_1_Offset		3442
-#define SDI_Range1_3_Offset		3591
+//11.06. 10 update 
+#define SDI_Range5_1_Offset		3308
+#define SDI_Range5_3_Offset		3365
+#define SDI_Range4_1_Offset		3440	//3361
+#define SDI_Range4_3_Offset		3600	//3448
+#define SDI_Range3_1_Offset		3439	//3438
+#define SDI_Range3_3_Offset		3628	//3634
+#define SDI_Range2_1_Offset		3459	//3459
+#define SDI_Range2_3_Offset		3606	//3606
+#define SDI_Range1_1_Offset		3441	//3442
+#define SDI_Range1_3_Offset		3591	//3591
 
-#define SDI_Range4_1_Slope		0
-#define SDI_Range4_3_Slope		0
-#define SDI_Range3_1_Slope		50
-#define SDI_Range3_3_Slope		124
-#define SDI_Range2_1_Slope		90
-#define SDI_Range2_3_Slope		78
-#define SDI_Range1_1_Slope		0
-#define SDI_Range1_3_Slope		0
+#define SDI_Range5_1_Slope		0
+#define SDI_Range5_3_Slope		0
+#define SDI_Range4_1_Slope		52	//0
+#define SDI_Range4_3_Slope		92	//0
+#define SDI_Range3_1_Slope		51	//50
+#define SDI_Range3_3_Slope		114	//124
+#define SDI_Range2_1_Slope		85	//90
+#define SDI_Range2_3_Slope		78	//78
+#define SDI_Range1_1_Slope		0	//0
+#define SDI_Range1_3_Slope		0	//0
 #endif
 
 /* ATL type low battery compensation offset */
+#define ATL_Range5_1_Offset		3298
+#define ATL_Range5_3_Offset		3330
 #define ATL_Range4_1_Offset		3298
 #define ATL_Range4_3_Offset		3330
 #define ATL_Range3_1_Offset		3375
@@ -176,6 +198,8 @@ struct max17042_chip {
 #define ATL_Range1_1_Offset		3362
 #define ATL_Range1_3_Offset		3443
 
+#define ATL_Range5_1_Slope		0
+#define ATL_Range5_3_Slope		0
 #define ATL_Range4_1_Slope		0
 #define ATL_Range4_3_Slope		0
 #define ATL_Range3_1_Slope		50

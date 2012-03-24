@@ -13,6 +13,7 @@ obj-y                                   += powergate.o
 obj-y                                   += suspend.o
 obj-y                                   += fuse.o
 obj-y                                   += kfuse.o
+obj-y                                   += i2c_error_recovery.o
 ifeq ($(CONFIG_TEGRA_ALSA),y)
 obj-$(CONFIG_ARCH_TEGRA_2x_SOC)         += tegra2_i2s.o
 else
@@ -21,6 +22,7 @@ endif
 obj-y                                   += tegra_spdif_audio.o
 obj-y                                   += tegra_das.o
 obj-y                                   += mc.o
+obj-$(CONFIG_TEGRA_STAT_MON)			+= tegra2_statmon.o
 obj-$(CONFIG_USB_SUPPORT)               += usb_phy.o
 obj-$(CONFIG_FIQ)                       += fiq.o
 obj-$(CONFIG_TEGRA_FIQ_DEBUGGER)        += tegra_fiq_debugger.o
@@ -142,3 +144,8 @@ obj-${CONFIG_MACH_SAMSUNG_VARIATION_TEGRA}           += board-sec-watchdog.o
 obj-${CONFIG_VIBTONZ}           += isa1200_vibrator.o
 obj-$(CONFIG_SEC_MODEM)					+= sec_smd_plat.o
 obj-$(CONFIG_SAMSUNG_LTE_MODEMCTL)      += p3lte-modem.o
+
+ifeq ($(CONFIG_TARGET_LOCALE_KOR),y)
+EXTRA_CFLAGS =-DMODELNAME=\"$(SEC_PRODUCTNAME)\"
+else
+endif

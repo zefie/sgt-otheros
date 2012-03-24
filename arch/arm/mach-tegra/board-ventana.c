@@ -237,7 +237,6 @@ static __initdata struct tegra_clk_init_table ventana_clk_init_table[] = {
 	{ "pwm",	"clk_32k",	32768,		false},
 	{ "pll_a",	NULL,		56448000,	false},
 	{ "pll_a_out0",	NULL,		11289600,	false},
-	{ "clk_dev1",	"pll_a_out0",	0,		true},
 	{ "i2s1",	"pll_a_out0",	11289600,	false},
 	{ "i2s2",	"pll_a_out0",	11289600,	false},
 	{ "audio",	"pll_a_out0",	11289600,	false},
@@ -369,6 +368,9 @@ static struct tegra_i2c_platform_data ventana_i2c1_platform_data = {
 	.bus_count	= 1,
 	.bus_clk_rate	= { 400000, 0 },
 	.slave_addr = 0x00FC,
+	.scl_gpio		= {TEGRA_GPIO_PC4, 0},
+	.sda_gpio		= {TEGRA_GPIO_PC5, 0},
+	.arb_recovery = arb_lost_recovery,
 };
 
 static const struct tegra_pingroup_config i2c2_ddc = {
@@ -388,6 +390,9 @@ static struct tegra_i2c_platform_data ventana_i2c2_platform_data = {
 	.bus_mux	= { &i2c2_ddc, &i2c2_gen2 },
 	.bus_mux_len	= { 1, 1 },
 	.slave_addr = 0x00FC,
+	.scl_gpio		= {0, TEGRA_GPIO_PT5},
+	.sda_gpio		= {0, TEGRA_GPIO_PT6},
+	.arb_recovery = arb_lost_recovery,
 };
 
 static struct tegra_i2c_platform_data ventana_i2c3_platform_data = {
@@ -395,6 +400,9 @@ static struct tegra_i2c_platform_data ventana_i2c3_platform_data = {
 	.bus_count	= 1,
 	.bus_clk_rate	= { 400000, 0 },
 	.slave_addr = 0x00FC,
+	.scl_gpio		= {TEGRA_GPIO_PBB2, 0},
+	.sda_gpio		= {TEGRA_GPIO_PBB3, 0},
+	.arb_recovery = arb_lost_recovery,
 };
 
 static struct tegra_i2c_platform_data ventana_dvc_platform_data = {
@@ -402,6 +410,9 @@ static struct tegra_i2c_platform_data ventana_dvc_platform_data = {
 	.bus_count	= 1,
 	.bus_clk_rate	= { 400000, 0 },
 	.is_dvc		= true,
+	.scl_gpio		= {TEGRA_GPIO_PZ6, 0},
+	.sda_gpio		= {TEGRA_GPIO_PZ7, 0},
+	.arb_recovery = arb_lost_recovery,
 };
 
 static struct tegra_audio_platform_data tegra_audio_pdata[] = {

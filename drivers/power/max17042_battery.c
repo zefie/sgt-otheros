@@ -493,11 +493,11 @@ void fg_low_batt_compensation(u32 level)
 	if (read_val < 0)
 		return;
 
-	temp = read_val * (level*10 + 4) / 1000;
+	temp = read_val * (level*100 + 1) / 10000;
 	fg_write_register(REMCAP_REP_REG, (u16)temp);
 
-	/* 2) RepSOC (06h) = 3.4% or 1.4% */
-	tempVal = (u16)((level << 8) | 0x67);
+	/* 2) RepSOC (06h) = 3.01% or 1.01% */
+	tempVal = (u16)((level << 8) | 0x3);
 	fg_write_register(SOCREP_REG, tempVal);
 
 	/* 3) MixSOC (0Dh) = RepSOC */
@@ -985,6 +985,10 @@ static void add_low_batt_comp_cnt(int range, int level)
 				chip->info.low_batt_comp_cnt[i][j] = 0;
 		}
 	}
+#ifdef CONFIG_TARGET_LOCALE_KOR
+	if (chip->info.low_batt_comp_cnt[range-1][level/2] == 2)
+		chip->pre_cond_ok = 1;;
+#endif
 }
 
 void reset_low_batt_comp_cnt(void)
@@ -993,6 +997,10 @@ void reset_low_batt_comp_cnt(void)
 	struct max17042_chip *chip = i2c_get_clientdata(client);
 
 	memset(chip->info.low_batt_comp_cnt, 0, sizeof(chip->info.low_batt_comp_cnt));
+#ifdef CONFIG_TARGET_LOCALE_KOR
+	chip->pre_cond_ok = 0;
+	chip->low_comp_pre_cond = 0;
+#endif	
 }
 
 static int check_low_batt_comp_condtion(int *nLevel)
@@ -1005,6 +1013,9 @@ static int check_low_batt_comp_condtion(int *nLevel)
 
 	for (i = 0; i < LOW_BATT_COMP_RANGE_NUM; i++) {
 		for (j = 0; j < LOW_BATT_COMP_LEVEL_NUM; j++) {
+#ifdef CONFIG_TARGET_LOCALE_KOR
+			pr_info("%s: chip->info.low_batt_comp_cnt[%d][%d] = %d \n", __func__, i, j, chip->info.low_batt_comp_cnt[i][j]);
+#endif
 			if (chip->info.low_batt_comp_cnt[i][j] >= MAX_LOW_BATT_CHECK_CNT) {
 				display_low_batt_comp_cnt();
 				ret = 1;
@@ -1023,6 +1034,13 @@ static int get_low_batt_threshold(int range, int level, int nCurrent)
 
 	if (fg_get_battery_type() == SDI_BATTERY_TYPE) {
 		switch (range) {
+		case 5:
+			if (level == 1)
+				ret = SDI_Range5_1_Offset + ((nCurrent * SDI_Range5_1_Slope) / 1000);
+			else if (level == 3)
+				ret = SDI_Range5_3_Offset + ((nCurrent * SDI_Range5_3_Slope) / 1000);
+			break;
+
 		case 4:
 			if (level == 1)
 				ret = SDI_Range4_1_Offset + ((nCurrent * SDI_Range4_1_Slope) / 1000);
@@ -1056,6 +1074,13 @@ static int get_low_batt_threshold(int range, int level, int nCurrent)
 		}
 	}  else if (fg_get_battery_type() == ATL_BATTERY_TYPE) {
 		switch (range) {
+		case 5:
+			if (level == 1)
+				ret = ATL_Range5_1_Offset + ((nCurrent * ATL_Range5_1_Slope) / 1000);
+			else if (level == 3)
+				ret = ATL_Range5_3_Offset + ((nCurrent * ATL_Range5_3_Slope) / 1000);
+			break;
+
 		case 4:
 			if (level == 1)
 				ret = ATL_Range4_1_Offset + ((nCurrent * ATL_Range4_1_Slope) / 1000);
@@ -1103,12 +1128,18 @@ int p3_low_batt_compensation(int fg_soc, int fg_vcell, int fg_current)
 	int bCntReset = 0;
 
 	/* Not charging, flag is none, Under 3.60V or 3.45V */
-	if (!chip->info.low_batt_comp_flag
-		&& (fg_vcell <= chip->info.check_start_vol)) {
+	if(fg_vcell <= chip->info.check_start_vol) {
 		fg_avg_current = fg_read_avg_current();
 		fg_min_current = min(fg_avg_current, fg_current);
 
-		if (fg_min_current < -1500) {
+		if (fg_min_current < -2500) {
+			if (fg_soc >= 2 && fg_vcell < get_low_batt_threshold(5, 1, fg_min_current))
+				add_low_batt_comp_cnt(5, 1);
+			else if (fg_soc >= 4 && fg_vcell < get_low_batt_threshold(5, 3, fg_min_current))
+				add_low_batt_comp_cnt(5, 3);
+			else
+				bCntReset = 1;
+		} else if (fg_min_current >= -2500 && fg_min_current < -1500) {
 			if (fg_soc >= 2 && fg_vcell < get_low_batt_threshold(4, 1, fg_min_current))
 				add_low_batt_comp_cnt(4, 1);
 			else if (fg_soc >= 4 && fg_vcell < get_low_batt_threshold(4, 3, fg_min_current))
@@ -1141,10 +1172,17 @@ int p3_low_batt_compensation(int fg_soc, int fg_vcell, int fg_current)
 		if (check_low_batt_comp_condtion(&new_level)) {
 			fg_low_batt_compensation(new_level);
 			reset_low_batt_comp_cnt();
+#ifdef CONFIG_TARGET_LOCALE_KOR
+			nRet = 1;
+#endif
 		}
 
-		if (bCntReset)
+		if (bCntReset) {
 			reset_low_batt_comp_cnt();
+#ifdef CONFIG_TARGET_LOCALE_KOR
+			nRet = 2;
+#endif
+		}
 
 		/* if compensation finished, then read SOC again!!*/
 		if (chip->info.low_batt_comp_flag) {
@@ -1154,8 +1192,9 @@ int p3_low_batt_compensation(int fg_soc, int fg_vcell, int fg_current)
 			pr_info("%s : SOC is set to %d\n", __func__, fg_soc);
 		}
 	}
-
+#ifndef CONFIG_TARGET_LOCALE_KOR
 	nRet = fg_soc;
+#endif
 
 	return nRet;
 }

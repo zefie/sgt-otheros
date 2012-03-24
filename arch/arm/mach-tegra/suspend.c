@@ -695,7 +695,6 @@ static void tegra_debug_uart_resume(void)
 #define MC_SECURITY_SIZE	0x70
 #define MC_SECURITY_CFG2	0x7c
 
-#if defined(CONFIG_MACH_SAMSUNG_P4LTE) || defined(CONFIG_MACH_SAMSUNG_P4WIFI)
 #define AHB_ARBITRATION_DISABLE		0x00
 #define AHB_ARBITRATION_PRIORITY_CTRL	0x04
 #define AHB_GIZMO_AHB_MEM		0x0c
@@ -803,7 +802,7 @@ void tegra_ahbgizmo_resume(void)
 	gizmo_writel(ahb_gizmo[27],AHB_MEM_PREFETCH_CFG2);
 	gizmo_writel(ahb_gizmo[28],AHB_ARBITRATION_AHB_MEM_WRQUE_MST_ID);
 }
-#endif
+
 #ifdef CONFIG_MACH_SAMSUNG_VARIATION_TEGRA
 extern int Is_call_active(void);
 #endif
@@ -837,9 +836,7 @@ static int tegra_suspend_enter(suspend_state_t state)
 	if (do_lp0) {
 		tegra_irq_suspend();
 		tegra_dma_suspend();
-#if defined(CONFIG_MACH_SAMSUNG_P4LTE) || defined(CONFIG_MACH_SAMSUNG_P4WIFI)
 		tegra_ahbgizmo_suspend();
-#endif
 		tegra_debug_uart_suspend();
 		tegra_pinmux_suspend();
 		tegra_timer_suspend();
@@ -892,9 +889,7 @@ static int tegra_suspend_enter(suspend_state_t state)
 		tegra_timer_resume();
 		tegra_pinmux_resume();
 		tegra_debug_uart_resume();
-#if defined(CONFIG_MACH_SAMSUNG_P4LTE) || defined(CONFIG_MACH_SAMSUNG_P4WIFI)
 		tegra_ahbgizmo_resume();
-#endif
 		tegra_dma_resume();
 		tegra_irq_resume();
 	}
@@ -951,7 +946,8 @@ void __init tegra_init_suspend(struct tegra_suspend_platform_data *plat)
 	(void)reg;
 	(void)mode;
 
-	if (plat->suspend_mode == TEGRA_SUSPEND_LP0 && tegra_lp0_vec_size) {
+	if (plat->suspend_mode == TEGRA_SUSPEND_LP0 && tegra_lp0_vec_size &&
+		tegra_lp0_vec_relocate) {
 		unsigned char *reloc_lp0;
 		unsigned long tmp;
 		void __iomem *orig;
@@ -1036,7 +1032,7 @@ out:
 	pmc_32kwritel(reg, PMC_CTRL);
 
 	/* now enable requests */
-#if defined(CONFIG_MACH_SAMSUNG_P4LTE) || defined(CONFIG_MACH_SAMSUNG_P4WIFI)
+#ifndef CONFIG_MACH_SAMSUNG_P4LTE    
 	reg |= (TEGRA_POWER_SYSCLK_OE << TEGRA_POWER_PMC_SHIFT);
 #endif
 	if (pdata->separate_req)

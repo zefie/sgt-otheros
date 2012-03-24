@@ -23,10 +23,15 @@ struct kbd_callbacks {
 
 struct dock_keyboard_platform_data {
 	int (*enable)(struct device *dev);
+	int (*wakeup_key)(void);
 	void (*disable)(struct device *dev);
 	void	(*register_cb)(struct kbd_callbacks *cb);
 	void	(*acc_power) (u8 token, bool active);
+#if defined(CONFIG_MACH_SAMSUNG_P5WIFI)
+	void (*disable_wifi_uart)(bool en);
+#endif
 	int gpio_accessory_enable;
+	int accessory_irq_gpio;
 };
 
 

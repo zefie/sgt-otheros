@@ -89,6 +89,9 @@ struct tps6586x_rtc_platform_data {
 	int irq;
 	struct tps6586x_epoch_start start;
 	int cl_sel; /* internal XTAL capacitance, see TPS6586X_RTC_CL_SEL* */
+#ifdef CONFIG_MACH_SAMSUNG_VARIATION_TEGRA
+	int default_year; /* default year to be set when rtc resets */
+#endif
 };
 
 struct tps6586x_platform_data {

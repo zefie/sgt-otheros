@@ -83,7 +83,7 @@ typedef unsigned char		BOOLEAN;
 
 // For printing debug information. ( Please check 'printing function' )
 #define MELFAS_ENABLE_DBG_PRINT											1
-#define MELFAS_ENABLE_DBG_PROGRESS_PRINT								1
+#define MELFAS_ENABLE_DBG_PROGRESS_PRINT								0
 
 // For delay function test. ( Disable after Porting is finished )
 #define MELFAS_ENABLE_DELAY_TEST										0
@@ -152,6 +152,7 @@ typedef unsigned char		BOOLEAN;
 
 #define MCSDL_GPIO_SCL_SET_OUTPUT(n)					gpio_direction_output(GPIO_TSP_SCL, n)
 #define MCSDL_GPIO_SCL_SET_INPUT()					gpio_direction_input(GPIO_TSP_SCL)
+#define MCSDL_GPIO_SCL_IS_HIGH()					((gpio_get_value(GPIO_TSP_SCL) > 0) ? 1 : 0)
 
 #define MCSDL_GPIO_SDA_SET_OUTPUT(n)					gpio_direction_output(GPIO_TSP_SDA, n)
 #define MCSDL_GPIO_SDA_SET_INPUT()					gpio_direction_input(GPIO_TSP_SDA)
@@ -193,11 +194,19 @@ typedef unsigned char		BOOLEAN;
 #define MCSDL_DELAY_30MS							30000
 #define MCSDL_DELAY_40MS							40000
 #define MCSDL_DELAY_45MS							45000
+#define MCSDL_DELAY_100MS						   100000
+
 
 //start ADD DELAY   
+#define MCSDL_DELAY_50MS                            50000
 #define MCSDL_DELAY_60MS                            60000
+#define MCSDL_DELAY_80MS                            80000
+
 #define MCSDL_DELAY_40US                               40
+#define MCSDL_DELAY_70US                               70
+
 #define MCSDL_DELAY_300US                             300
+#define MCSDL_DELAY_500MS						   500000
 //end add delay
 
 //============================================================

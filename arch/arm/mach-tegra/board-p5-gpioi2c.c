@@ -459,7 +459,7 @@ static void sii9234_hw_reset(void)
 {
 	struct regulator *reg;
 
-	gpio_set_value(GPIO_MHL_RST, 1);
+	gpio_set_value(GPIO_MHL_RST, 0);
 	reg = regulator_get(NULL, "vdd_ldo7");
 	if (IS_ERR_OR_NULL(reg)) {
 		pr_err("%s: failed to get vdd_ldo7 regulator\n", __func__);
@@ -479,6 +479,8 @@ static void sii9234_hw_reset(void)
 	msleep(10);
 	gpio_set_value(GPIO_HDMI_EN1, 1);
 
+	msleep(5);
+	gpio_set_value(GPIO_MHL_RST, 1);
 	msleep(5);
 	gpio_set_value(GPIO_MHL_RST, 0);
 
@@ -509,7 +511,6 @@ static void sii9234_hw_off(void)
 	regulator_disable(reg);
 	regulator_put(reg);
 
-	msleep(10);
 	gpio_set_value(GPIO_MHL_RST, 0);
 }
 

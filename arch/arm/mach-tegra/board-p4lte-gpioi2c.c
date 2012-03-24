@@ -500,7 +500,6 @@ static void sii9234_hw_off(void)
 	regulator_disable(reg);
 	regulator_put(reg);
 
-	usleep_range(10000, 20000);
 	gpio_set_value(GPIO_MHL_RST, 0);
 }
 
@@ -574,7 +573,9 @@ int __init p3_gpio_i2c_init(void)
     if (system_rev >= 0x2) {  /* greater than Rev0.2 or same */
         platform_device_register(&tegra_gpio_i2c12_device);
         platform_device_register(&tegra_gpio_i2c14_device);
+#if defined(CONFIG_VIBTONZ)
         platform_device_register(&tegra_gpio_i2c15_device);
+#endif
     }
 
     i2c_register_board_info(6, sec_gpio_i2c6_info, ARRAY_SIZE(sec_gpio_i2c6_info));
@@ -591,7 +592,9 @@ int __init p3_gpio_i2c_init(void)
     if (system_rev >= 0x2) {
         sii9234_init();
         i2c_register_board_info(14, sec_gpio_i2c14_info, ARRAY_SIZE(sec_gpio_i2c14_info));
+#if defined(CONFIG_VIBTONZ)
         i2c_register_board_info(15, sec_gpio_i2c15_info, ARRAY_SIZE(sec_gpio_i2c15_info));
+#endif
     }
 
     return 0;

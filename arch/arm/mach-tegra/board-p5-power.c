@@ -155,7 +155,7 @@ static struct regulator_init_data ldo9_data = REGULATOR_INIT(ldo9, 2850, 2850);
 
 /* Regulators that are not enabled by the bootloader */
 static struct regulator_init_data ldo0_data = REGULATOR_SET (ldo0, 3300, OFF);
-static struct regulator_init_data ldo4_data = REGULATOR_SET (ldo4, 1800, ON);
+static struct regulator_init_data ldo4_data = REGULATOR_SET (ldo4, 1800, OFF);
 static struct regulator_init_data ldo5_data = REGULATOR_SET (ldo5, 3300, OFF);
 static struct regulator_init_data ldo7_data = REGULATOR_SET (ldo7, 3300, OFF);
 static struct regulator_init_data ldo8_data = REGULATOR_SET (ldo8, 2850, OFF);
@@ -170,11 +170,14 @@ static struct regulator_init_data ldo6_data = REGULATOR_SET (ldo6, 3300, OFF);
 static struct tps6586x_rtc_platform_data rtc_data = {
 	.irq = TPS6586X_INT_BASE + TPS6586X_INT_RTC_ALM1,
 	.start = {
-		.year = 2011,
+		.year = 2004,
 		.month = 1,
 		.day = 1,
 	},
 	.cl_sel = TPS6586X_RTC_CL_SEL_6_5PF, /* use 6.5pF */
+#ifdef CONFIG_MACH_SAMSUNG_VARIATION_TEGRA
+	.default_year = 2011,
+#endif	
 };
 
 static struct led_tps6586x_pdata led_data = {
@@ -262,14 +265,14 @@ static struct tegra_suspend_platform_data p3_suspend_data = {
 #else
 	.wake_enb	= TEGRA_WAKE_GPIO_PA0 | TEGRA_WAKE_GPIO_PW2 |
 		TEGRA_WAKE_GPIO_PU6 |
-		TEGRA_WAKE_RTC_ALARM | TEGRA_WAKE_GPIO_PY6 |
+		TEGRA_WAKE_RTC_ALARM | TEGRA_WAKE_GPIO_PY6 | TEGRA_WAKE_GPIO_PO5 |
 		TEGRA_WAKE_GPIO_PI5,
 #endif
 	.wake_high	= TEGRA_WAKE_GPIO_PA0 ,
 #ifdef CONFIG_MACH_SAMSUNG_P5WIFI
 	.wake_low	= TEGRA_WAKE_GPIO_PY6,
 #else
-	.wake_low	= TEGRA_WAKE_GPIO_PW2 |
+	.wake_low	= TEGRA_WAKE_GPIO_PW2 | TEGRA_WAKE_GPIO_PO5 |
 	TEGRA_WAKE_GPIO_PY6,
 #endif
 	.wake_any	= TEGRA_WAKE_GPIO_PU6 | TEGRA_WAKE_RTC_ALARM  | TEGRA_WAKE_GPIO_PI5,

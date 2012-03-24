@@ -86,21 +86,13 @@ static struct mpu3050_platform_data p3_mpu3050_pdata = {
 	 * 90 degrees counter-clockwise from natural orientation.
 	 * So X & Y are swapped and Y is negated.
 	 */
-	 /*
-	.orientation = {  0, -1,  0,
-			  1,  0,  0,
-			  0,  0,  1 },
-	*/
-	.orientation = {1, 0,  0,
-			  	 0,  1,  0,
-			  	 0,  0,  1 },
-
+	.orientation = {0, -1,  0,
+		 	  	    1,  0,  0,
+			  	    0,  0,  1 },
 	.level_shifter = 0,
 	.accel = {
 		.get_slave_descr = kxtf9_get_slave_descr,
-                .irq         = 0,
-		.adapt_num   = 0,
-
+        .irq         = 0,
 		.adapt_num   = 2,
 		.bus         = EXT_SLAVE_BUS_SECONDARY,
 		.address     = 0x0F,
@@ -108,16 +100,9 @@ static struct mpu3050_platform_data p3_mpu3050_pdata = {
 		 * 180 degrees from natural orientation.
 		 * So X & Y are both negated.
 		 */
-		 /*
-		.orientation = { -1,  0,  0,
-				  0, -1,  0,
-				  0,  0,  1 },
-				  */
-		.orientation = { 1,  0,  0,
-				 	0, 1,  0,
-				  	0,  0, 1 },
-
-
+		.orientation = { 0, -1,  0,
+			  	 	     1,  0,  0,
+				  	     0,  0,  1 },
 	},
 	.compass = {
 		.get_slave_descr = ak8975_get_slave_descr,
@@ -129,14 +114,8 @@ static struct mpu3050_platform_data p3_mpu3050_pdata = {
 		 * 90 degrees counter-clockwise from natural orientation.
 		 * So X & Y are swapped and Y is negated.
 		 */
-		 /*
-		.orientation = {  0, -1,  0,
-				  1,  0,  0,
-				  0,  0,  1 },
-		*/
-
-		.orientation = {  0, -1,  0,
-		  			      -1,  0,  0,
+		.orientation = {  0,  1,  0,
+		  			     -1,  0,  0,
 		 			      0,  0, -1},
 
 	},
@@ -191,8 +170,23 @@ static int  bh1721fvc_light_sensor_reset(void)
 	return 0;
 }
 
+static int  bh1721fvc_light_sensor_output(int value)
+{
+	int err;
+
+	err = gpio_direction_output(GPIO_LIGHT_SENSOR_DVI, value);
+	if (err) {
+		printk(KERN_ERR "Failed to make the light sensor gpio(dvi)"
+			" low (%d)\n", err);
+		return err;
+	}
+ 	return 0;
+}
+
+
 static struct bh1721fvc_platform_data bh1721fvc_pdata = {
 	.reset = bh1721fvc_light_sensor_reset,
+	.output = bh1721fvc_light_sensor_output,		
 };
 
 static struct i2c_board_info p3_i2c_light_sensor_board_info[] = {

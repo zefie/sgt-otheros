@@ -55,7 +55,7 @@ void p3_bt_uart_wake_peer(struct uart_port *);
 #  else
 #    define SAMSUNG_KIES_PRODUCT_ID	0x6860	/* mtp(0) + acm(1,2) */
 #  endif
-#    define SAMSUNG_DEBUG_PRODUCT_ID	0x685e	/* ums(0) + acm(1,2) + adb(3) (with MS Composite) */
+#    define SAMSUNG_DEBUG_PRODUCT_ID	0x6860	/* mtp(0) + acm(1,2) + adb(3) (with MS Composite) */
 #    define SAMSUNG_UMS_PRODUCT_ID	0x685B  /* UMS Only */
 #    define SAMSUNG_MTP_PRODUCT_ID	0x685C  /* MTP Only */
 #    ifdef CONFIG_USB_ANDROID_SAMSUNG_RNDIS_WITH_MS_COMPOSITE
@@ -63,7 +63,7 @@ void p3_bt_uart_wake_peer(struct uart_port *);
 #    else
 #      define SAMSUNG_RNDIS_PRODUCT_ID	0x6863  /* RNDIS only */
 #    endif
-#    define ANDROID_DEBUG_CONFIG_STRING	 "UMS + ACM + ADB (Debugging mode)"
+#    define ANDROID_DEBUG_CONFIG_STRING	 "MTP + ACM + ADB (Debugging mode)"
 #  ifdef CONFIG_USB_ANDROID_SAMSUNG_KIES_UMS
 #    define ANDROID_KIES_CONFIG_STRING	 "UMS + ACM (SAMSUNG KIES mode)"
 #  else
@@ -80,6 +80,10 @@ void p3_bt_uart_wake_peer(struct uart_port *);
 #  endif
 #  define       ANDROID_UMS_CONFIG_STRING	 "UMS Only (Not debugging mode)"
 #  define       ANDROID_MTP_CONFIG_STRING	 "MTP Only (Not debugging mode)"
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+#    define ANDROID_ACCESSORY_CONFIG_STRING		"ACCESSORY Only(ADK mode)"
+#    define ANDROID_ACCESSORY_ADB_CONFIG_STRING	"ACCESSORY _ADB (ADK + ADB mode)"
+#endif
 #  ifdef CONFIG_USB_ANDROID_SAMSUNG_RNDIS_WITH_MS_COMPOSITE
 #    define       ANDROID_RNDIS_CONFIG_STRING	 "RNDIS + UMS (Not debugging mode)"
 #  else
@@ -95,6 +99,9 @@ void p3_bt_uart_wake_peer(struct uart_port *);
 #  define USBSTATUS_DM				0x20
 #  define USBSTATUS_ACM				0x40
 #  define USBSTATUS_SAMSUNG_KIES_REAL		0x80
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+#  define USBSTATUS_ACCESSORY			0x100
+#endif
 
 /* soonyong.cho : This is for setting unique serial number */
 //void __init s3c_usb_set_serial(void);

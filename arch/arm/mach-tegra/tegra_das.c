@@ -321,8 +321,9 @@ const struct tegra_das_con* get_con_table_entry(
 	const struct tegra_das_con *ptable =
 				das_drv_data->pdata->tegra_das_con_table;
 	int i;
-
-	for (i = 0; i < tegra_das_port_con_id_max; i++) {
+	
+	/* bugfix: Do not refer invalid index of ptable */
+	for (i = 0; i < MAX_DAP_PORTS; i++) {
 		if (con_id == ptable[i].con_id) {
 			return &ptable[i];
 		}

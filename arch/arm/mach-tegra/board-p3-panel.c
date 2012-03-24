@@ -226,6 +226,7 @@ static struct tegra_dc_out p3_disp2_out = {
 	.order		= TEGRA_DC_ORDER_RED_BLUE,
 
 	.hotplug_gpio	= GPIO_HDMI_HPD,
+	.max_pixclock   = KHZ2PICOS(148500),
 	.enable		= p3_hdmi_enable,
 	.disable	= p3_hdmi_disable,
 };

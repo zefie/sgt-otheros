@@ -111,7 +111,6 @@ size_t tegra_iovmm_get_max_free(struct tegra_iovmm_client *client)
 	return max_free;
 }
 
-
 static void tegra_iovmm_block_stats(struct tegra_iovmm_domain *domain,
 	unsigned int *num_blocks, unsigned int *num_free,
 	tegra_iovmm_addr_t *total, tegra_iovmm_addr_t *total_free,

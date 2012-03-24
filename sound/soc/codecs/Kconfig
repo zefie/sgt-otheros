@@ -267,7 +267,7 @@ config SND_SOC_WM8993
 	tristate
 
 config SND_SOC_WM8994
-	tristate
+	tristate "WM8994 Generic"
 
 config SND_SOC_WM8994_P3
 	tristate "WM8994 for Samsung P3 codec"

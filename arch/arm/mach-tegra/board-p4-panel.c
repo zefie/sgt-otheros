@@ -25,7 +25,6 @@
 #include <asm/mach-types.h>
 #include <linux/platform_device.h>
 #include <linux/earlysuspend.h>
-#include <linux/kernel.h>
 #include <linux/pwm_backlight.h>
 #include <mach/nvhost.h>
 #include <mach/nvmap.h>
@@ -42,6 +41,8 @@
 
 #define FB_X_RES 1280
 #define FB_Y_RES 800
+#define LCD_10_1_HEIGHT_SIZE    135
+#define LCD_10_1_WIDTH_SIZE     217
 #define FB_BITS_PER_PIXEL 32
 
 #if 0
@@ -143,6 +144,27 @@ static struct resource p3_disp2_resources[] = {
 	},
 };
 
+#if defined(CONFIG_TARGET_LOCALE_KOR)
+
+static struct tegra_dc_mode p3_panel_modes[] = {
+       {          // SAMSULG PLS LCD panel
+                 .pclk = 72000000,
+		.h_ref_to_sync = 1,
+		.v_ref_to_sync = 1,
+		.h_sync_width = 48,
+		.v_sync_width = 3,
+		.h_back_porch = 88,
+                 .v_back_porch = 34-1,
+		.h_active = 1280,
+		.v_active = 800,
+		.h_front_porch = 16,
+                 .v_front_porch = 1+1,
+		.flags = TEGRA_DC_MODE_FLAG_NEG_V_SYNC
+			| TEGRA_DC_MODE_FLAG_NEG_H_SYNC,
+	},
+};
+
+#else // kyNam_110614_
 static struct tegra_dc_mode p3_panel_modes[] = {
 	{	/* SAMSULG PLS LCD panel */
 		.pclk = 68941176, /* for lcd pclk 68.94Mhz */
@@ -160,6 +182,7 @@ static struct tegra_dc_mode p3_panel_modes[] = {
 			| TEGRA_DC_MODE_FLAG_NEG_H_SYNC,
 	},
 };
+#endif 
 
 static struct tegra_fb_data p3_fb_data = {
 	.win		= 0,
@@ -206,6 +229,8 @@ static struct tegra_dc_out p3_disp1_out = {
 	.order		= TEGRA_DC_ORDER_RED_BLUE,
 	.modes		= p3_panel_modes,
 	.n_modes	= ARRAY_SIZE(p3_panel_modes),
+        .height     = LCD_10_1_HEIGHT_SIZE,
+        .width      = LCD_10_1_WIDTH_SIZE,
 
 #if 0
 	.enable		= p3_panel_enable,
@@ -304,39 +329,6 @@ static struct platform_device *p3_gfx_devices[] __initdata = {
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 
-static char *cpufreq_gov_conservative = "conservative";
-static char *cpufreq_gov_interactive = "interactive";
-static char *cpufreq_sysfs_place_holder="/sys/devices/system/cpu/cpu%i/cpufreq/scaling_governor";
-
-static void p3_panel_set_cpufreq_governor(char *governor)
-{
-	struct file *scaling_gov = NULL;
-	char    buf[128];
-	int i;
-	loff_t offset = 0;
-
-	if (governor == NULL)
-		return;
-
-	for_each_cpu(i, cpu_present_mask) {
-		sprintf(buf, cpufreq_sysfs_place_holder,i);
-		scaling_gov = filp_open(buf, O_RDWR, 0);
-		if (scaling_gov != NULL) {
-			if (scaling_gov->f_op != NULL &&
-				scaling_gov->f_op->write != NULL)
-				scaling_gov->f_op->write(scaling_gov,
-						governor,
-						strlen(governor),
-						&offset);
-			else pr_err("f_op might be null\n");
-
-			filp_close(scaling_gov, NULL);
-		} else {
-			pr_err("%s. Can't open %s\n", __func__, buf);
-		}
-	}
-}
-
 /* put early_suspend/late_resume handlers here for the display in order
  * to keep the code out of the display driver, keeping it closer to upstream
  */
@@ -344,18 +336,16 @@ struct early_suspend p3_panel_early_suspender;
 
 static void p3_panel_early_suspend(struct early_suspend *h)
 {
-	if (num_registered_fb > 0)
-		fb_blank(registered_fb[0], FB_BLANK_POWERDOWN);
-
-	p3_panel_set_cpufreq_governor(cpufreq_gov_conservative);
+       unsigned i;
+       for (i = 0; i < num_registered_fb; i++)
+               fb_blank(registered_fb[i], FB_BLANK_POWERDOWN);
 }
 
 static void p3_panel_late_resume(struct early_suspend *h)
 {
-	if (num_registered_fb > 0)
-		fb_blank(registered_fb[0], FB_BLANK_UNBLANK);
-
-	p3_panel_set_cpufreq_governor(cpufreq_gov_interactive);
+       unsigned i;
+       for (i = 0; i < num_registered_fb; i++)
+               fb_blank(registered_fb[i], FB_BLANK_UNBLANK);
 }
 #endif
 

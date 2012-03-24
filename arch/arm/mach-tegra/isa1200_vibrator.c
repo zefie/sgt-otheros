@@ -65,6 +65,7 @@ struct isa1200_vibrator_drvdata {
 	u8 period;
 };
 
+#ifdef CONFIG_IMAGIS_AUTOHAPTIC
 #undef DEBUG_HPTDRV
 
 #define IOCTL_I2C_READ						0x5295
@@ -109,6 +110,10 @@ typedef struct {
     reg_data_t val[2];
 } _HPTREG_INFO;
 
+bool flag_chip_en =0;
+#endif
+
+
 #ifdef CONFIG_VIBTONZ
 static struct isa1200_vibrator_drvdata	*g_drvdata;
 static int isa1200_vibrator_i2c_write(struct i2c_client *client,
@@ -150,6 +155,9 @@ int vibtonz_clk_enable(bool en)
 						TEGRA_TRI_TRISTATE);
 #endif
 	}
+#ifdef CONFIG_IMAGIS_AUTOHAPTIC
+	flag_chip_en = en ? true : false;
+#endif
 	return 0;
 }
 
@@ -161,10 +169,14 @@ int vibtonz_chip_enable(bool en)
 	}
 
 	gpio_direction_output(g_drvdata->gpio_en, en ? true : false);
+#ifdef CONFIG_IMAGIS_AUTOHAPTIC
+	flag_chip_en = en ? true : false;
+#endif
 	return 0;
 }
 #endif
 
+#ifdef CONFIG_IMAGIS_AUTOHAPTIC
 static int vibrator_write_register(u8 addr, u8 w_data)
 {
 	int ret;
@@ -194,6 +206,7 @@ static int vibrator_read_register(u8 addr)
 
 	return ret;
 }
+#endif
 
 static int isa1200_vibrator_i2c_write(struct i2c_client *client,
 					u8 addr, u8 val)
@@ -257,6 +270,9 @@ static void isa1200_vibrator_off(struct isa1200_vibrator_drvdata *data)
 		HAPTIC_PWM_DUTY_REG, data->period/2);
 	isa1200_vibrator_i2c_write(data->client,
 		HAPTIC_CONTROL_REG0, data->ctrl0);
+#ifdef CONFIG_IMAGIS_AUTOHAPTIC
+	flag_chip_en = false;
+#endif
 }
 
 static void isa1200_vibrator_set_val(struct isa1200_vibrator_drvdata *data,
@@ -264,7 +280,7 @@ static void isa1200_vibrator_set_val(struct isa1200_vibrator_drvdata *data,
 {
 	if (0 == val) {
 		if (!data->running)
-			return;
+			return ;
 
 		data->running = false;
 		isa1200_vibrator_off(data);
@@ -287,6 +303,7 @@ static void isa1200_vibrator_set_val(struct isa1200_vibrator_drvdata *data,
 		mdelay(1);
 		isa1200_vibrator_on(data);
 	}
+
 }
 
 static enum hrtimer_restart isa1200_vibrator_timer_func(struct hrtimer *_timer)
@@ -325,10 +342,10 @@ static void isa1200_vibrator_enable(struct timed_output_dev *_dev, int value)
 		container_of(_dev, struct isa1200_vibrator_drvdata, dev);
 	unsigned long	flags;
 
-#ifdef CONFIG_KERNEL_DEBUG_SEC
+#ifdef MOTOR_DEBUG
 	pr_info("[VIB] time = %dms\n", value);
 #endif
-
+	cancel_work_sync(&data->work);
 	spin_lock_irqsave(&data->lock, flags);
 	hrtimer_cancel(&data->timer);
 	isa1200_vibrator_set_val(data, value);
@@ -343,6 +360,7 @@ static void isa1200_vibrator_enable(struct timed_output_dev *_dev, int value)
 	spin_unlock_irqrestore(&data->lock, flags);
 }
 
+#ifdef CONFIG_IMAGIS_AUTOHAPTIC
 static int haptic_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 {
@@ -423,6 +441,15 @@ static int haptic_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
             if (copy_to_user((struct reg_data_t *)arg, &reg_info, sizeof(reg_info)))
                 return -EFAULT;
+			if(flag_chip_en==false){
+				vibtonz_clk_enable(1);
+				vibtonz_chip_enable(1);
+				vibrator_write_register(0x31, 0xc0);
+				vibrator_write_register(0x33, 0x23);
+				vibrator_write_register(0x36, 0x74);
+				vibrator_write_register(0x30, 0x91);
+				flag_chip_en = true;
+			}
             break;
 #endif
 
@@ -441,6 +468,7 @@ static const struct file_operations haptic_fileops = {
     	//.ioctl   	= haptic_ioctl,
 		.unlocked_ioctl	= haptic_ioctl,
 };
+#endif
 
 static int __devinit isa1200_vibrator_i2c_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
@@ -476,7 +504,6 @@ static int __devinit isa1200_vibrator_i2c_probe(struct i2c_client *client,
 	hrtimer_init(&ddata->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	ddata->timer.function = isa1200_vibrator_timer_func;
 	INIT_WORK(&ddata->work, isa1200_vibrator_work);
-
 	spin_lock_init(&ddata->lock);
 
 #ifdef CONFIG_MACH_SAMSUNG_VARIATION_TEGRA
@@ -491,6 +518,7 @@ static int __devinit isa1200_vibrator_i2c_probe(struct i2c_client *client,
 	platform_set_drvdata(client, ddata);
 	isa1200_vibrator_hw_init(ddata);
 
+	#ifdef CONFIG_IMAGIS_AUTOHAPTIC
 	if (register_chrdev(MAJOR_HAPTIC, "haptic",&haptic_fileops)){
 		printk("unable to get major %d for haptic devs\n", MAJOR_HAPTIC);
 		return -ENOMEM;
@@ -500,6 +528,7 @@ static int __devinit isa1200_vibrator_i2c_probe(struct i2c_client *client,
 
 	haptic_class = class_create(THIS_MODULE, "haptic");
 	device_create(haptic_class, NULL, MKDEV(MAJOR_HAPTIC, 0), NULL, "haptic" );
+	#endif
 
 	ret = timed_output_dev_register(&ddata->dev);
 	if (ret < 0) {

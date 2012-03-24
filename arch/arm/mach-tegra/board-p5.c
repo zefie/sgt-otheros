@@ -97,6 +97,10 @@
 #include <media/tdmb_plat.h>
 #endif
 
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+#include <linux/usb/f_accessory.h>
+#endif
+
 #ifdef CONFIG_SAMSUNG_LPM_MODE
 #include <linux/moduleparam.h>
 #endif
@@ -243,9 +247,20 @@ static int p3_notifier_call(struct notifier_block *this,
 {
 	int mode;
 	u32 value;
-        value = gpio_get_value(GPIO_TA_nCONNECTED);
+	struct regulator *reg;
+
+	value = gpio_get_value(GPIO_TA_nCONNECTED);
 
 	if (code == SYS_RESTART) {
+		reg = regulator_get(NULL, "vdd_ldo4");
+		if (IS_ERR_OR_NULL(reg))
+			pr_err("%s: couldn't get regulator vdd_ldo4\n", __func__);
+		else {
+			regulator_enable(reg);
+			pr_debug("%s: enabling regulator vdd_ldo4\n", __func__);
+			regulator_put(reg);
+		}
+
 		mode = REBOOT_MODE_NORMAL;
 		if (_cmd) {
 			if (!strcmp((char *)_cmd, "recovery"))
@@ -274,6 +289,23 @@ static int p3_notifier_call(struct notifier_block *this,
 static struct notifier_block p3_reboot_notifier = {
 	.notifier_call = p3_notifier_call,
 };
+
+int p5_panic_notifier_call(void)
+{
+	struct regulator *reg;
+	pr_debug("%s\n", __func__);
+	
+	reg = regulator_get(NULL, "vdd_ldo4");
+	if (IS_ERR_OR_NULL(reg))
+		pr_err("%s: couldn't get regulator vdd_ldo4\n", __func__);
+	else {
+		regulator_enable(reg);
+		pr_debug("%s: enabling regulator vdd_ldo4\n", __func__);
+		regulator_put(reg);
+	}
+	
+	return NOTIFY_DONE;
+}
 
 static struct plat_serial8250_port debug_uart_platform_data[] = {
 	{
@@ -440,7 +472,7 @@ static __initdata struct tegra_clk_init_table p3_clk_init_table[] = {
 	{ "spdif_out",	"pll_a_out0",	5644800,	false},
 	{ "vde",	"pll_m",	240000000,	false},
 	{ "sclk", NULL, 240000000,  true},
-	{ "hclk", "sclk", 240000000,  true},   
+	{ "hclk", "sclk", 240000000,  true},
 	{ NULL,		NULL,		0,		0},
 };
 
@@ -555,12 +587,25 @@ static char *usb_functions_acm_ums_adb[] = {
 static char *usb_functions_mtp[] = {
 	"mtp",
 };
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+/* accessory mode */
+static char *usb_functions_accessory[] = {
+	"accessory",
+};
+static char *usb_functions_accessory_adb[] = {
+	"accessory",
+	"adb",
+};
+#endif
 static char *usb_functions_all[] = {
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 /* soonyong.cho : Every function driver for samsung composite.
  *  		  Number of to enable function features have to be same as below.
  */
 #  ifdef CONFIG_USB_ANDROID_SAMSUNG_ESCAPE /* USE DEVGURU HOST DRIVER */
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+	"accessory",
+#endif	
 	"usb_mass_storage",
 	"acm",
 	"adb",
@@ -662,6 +707,8 @@ static struct android_usb_product usb_products[] = {
 		.bDeviceProtocol= 0x01,
 		.s		= ANDROID_KIES_CONFIG_STRING,
 		.mode		= USBSTATUS_SAMSUNG_KIES,
+		.multi_conf_functions[0] = usb_functions_mtp,
+		.multi_conf_functions[1] = usb_functions_mtp_acm,		
 	},
 	{
 		.product_id	= SAMSUNG_UMS_PRODUCT_ID,
@@ -673,6 +720,30 @@ static struct android_usb_product usb_products[] = {
 		.s		= ANDROID_UMS_CONFIG_STRING,
 		.mode		= USBSTATUS_UMS,
 	},
+#ifdef CONFIG_USB_ANDROID_ACCESSORY	
+	{
+		.vendor_id	= USB_ACCESSORY_VENDOR_ID,
+		.product_id	= USB_ACCESSORY_PRODUCT_ID,
+		.num_functions	= ARRAY_SIZE(usb_functions_accessory),
+		.functions	= usb_functions_accessory,
+		.bDeviceClass	= USB_CLASS_PER_INTERFACE,
+		.bDeviceSubClass= 0,
+		.bDeviceProtocol= 0,
+		.s		= ANDROID_ACCESSORY_CONFIG_STRING,
+		.mode		= USBSTATUS_ACCESSORY,
+	},	
+	{
+		.vendor_id	= USB_ACCESSORY_VENDOR_ID,
+		.product_id	= USB_ACCESSORY_PRODUCT_ID,
+		.num_functions	= ARRAY_SIZE(usb_functions_accessory_adb),
+		.functions	= usb_functions_accessory_adb,
+		.bDeviceClass	= USB_CLASS_PER_INTERFACE,
+		.bDeviceSubClass= 0,
+		.bDeviceProtocol= 0,
+		.s		= ANDROID_ACCESSORY_ADB_CONFIG_STRING,
+		.mode		= USBSTATUS_ACCESSORY,
+	},		
+#endif	
 	{
 		.product_id	= SAMSUNG_RNDIS_PRODUCT_ID,
 		.num_functions	= ARRAY_SIZE(usb_functions_rndis),
@@ -1072,6 +1143,11 @@ static int p3_wakeup_key(void)
 {
 	unsigned long status =
 		readl(IO_ADDRESS(TEGRA_PMC_BASE) + PMC_WAKE_STATUS);
+		
+	if (status & TEGRA_WAKE_GPIO_PA0) {
+		writel(TEGRA_WAKE_GPIO_PA0,
+			IO_ADDRESS(TEGRA_PMC_BASE) + PMC_WAKE_STATUS);
+	}		
 
 	return status & TEGRA_WAKE_GPIO_PA0 ? KEY_POWER : KEY_RESERVED;
 }
@@ -1162,40 +1238,53 @@ static void tegra_otg_en(int active)
 void tegra_acc_power(u8 token, bool active)
 {
 	int gpio_acc_en;
+	int gpio_acc_5v;
+	int try_cnt = 0;
 	static bool enable = false;
 	static u8 acc_en_token = 0;
-
-#if 0
-	enum {
-		ACC_EN_TOKEN_1 = 0, /* keyboard */
-		ACC_EN_TOKEN_2,   	/* usb otg */
-		...
-		DVFS_LOCK_TOKEN_NUM
-	};
-#endif
 
 	if (system_rev < 0x06)
 		gpio_acc_en = GPEX_GPIO_P8;
 	else
 		gpio_acc_en = GPIO_ACCESSORY_EN;
+	gpio_acc_5v = GPIO_V_ACCESSORY_5V;
+
+	/*	token info
+		0 : force power off,
+		1 : usb otg
+		2 : ear jack
+		3 : keyboard
+	*/
 
 	if (active) {
 		acc_en_token |= (1 << token);
-
-		if (enable)
-			return ;
-
 		enable = true;
 		gpio_direction_output(gpio_acc_en, 1);
+		msleep(1);
+		while(!gpio_get_value(gpio_acc_5v)) {
+			gpio_direction_output(gpio_acc_en, 0);
+			msleep(10);
+			gpio_direction_output(gpio_acc_en, 1);
+			if (try_cnt > 30) {
+				pr_err("[acc] failed to enable the accessory_en");
+				break;
+			} else
+				try_cnt++;
+		}
 	} else {
-		acc_en_token &= ~(1 << token);
-
-		if (0 == acc_en_token) {
+		if (0 == token) {
 			gpio_direction_output(gpio_acc_en, 0);
 			enable = false;
+		} else {
+			acc_en_token &= ~(1 << token);
+			if (0 == acc_en_token) {
+				gpio_direction_output(gpio_acc_en, 0);
+				enable = false;
+			}
 		}
 	}
-	pr_info("Board P4 : %s token : %d, %s\n", __func__, token, enable ? "on" : "off");
+	pr_info("Board P4 : %s token : (%d,%d) %s\n", __func__,
+		token, active, enable ? "on" : "off");
 }
 
 static int p3_kbc_keycode[] = {
@@ -1343,6 +1432,15 @@ void p3_bat_gpio_init(void)
 //	sec_batt_level = batt_level;
 //}
 
+#if defined(CONFIG_TOUCHSCREEN_MELFAS)
+static struct tsp_callbacks * charger_callbacks;
+static void tsp_inform_charger_connection(int mode)
+{
+	if (charger_callbacks && charger_callbacks->inform_charger)
+		charger_callbacks->inform_charger(charger_callbacks, mode);
+}
+#endif
+
 static struct p3_battery_platform_data p3_battery_platform = {
 	.charger = {
 		.enable_line = GPIO_TA_EN,
@@ -1353,15 +1451,17 @@ static struct p3_battery_platform_data p3_battery_platform = {
 	.check_dedicated_charger = check_samsung_charger,
 	.init_charger_gpio = p3_bat_gpio_init,
 //	.get_batt_level = sec_bat_get_level,
-//	.inform_charger_connection = tsp_inform_charger_connection,
+#if defined(CONFIG_TOUCHSCREEN_MELFAS)
+	.inform_charger_connection = tsp_inform_charger_connection,
+#endif
 
 #ifdef CONFIG_TARGET_LOCALE_KOR
-	.temp_high_threshold = 61500,	/* 580 (spec) + 35 (dT) */
-	.temp_high_recovery = 41700,	/* 417 */
-	.temp_low_recovery = -1000,		/* -10 */
-	.temp_low_threshold = -4000,		/* -40 */
+	.temp_high_threshold = 63000,	/* 580 (spec) + 35 (dT) */
+	.temp_high_recovery = 45500,	/* 417 */
+	.temp_low_recovery = 2300,		/* -10 */
+	.temp_low_threshold = -2000,		/* -40 */
 	.charge_duration = 10*60*60,	/* 10 hour */
-	.recharge_duration = 1.5*60*60,	/* 1.5 hour */
+	.recharge_duration = 2*60*60,	/* 2 hour */
 	.recharge_voltage = 4150,	/*4.15V */
 #else
 	.temp_high_threshold = 50000,	/* 50c */
@@ -1437,6 +1537,7 @@ static struct uart_platform_data uart_pdata {
 
 static struct dock_keyboard_platform_data kbd_pdata = {
 	.acc_power = tegra_acc_power,
+	.accessory_irq_gpio = GPIO_ACCESSORY_INT,
 };
 
 static struct platform_device sec_keyboard = {
@@ -1452,11 +1553,11 @@ static struct platform_device sec_keyboard = {
 static struct sec_jack_zone sec_jack_zones[] = {
 	{
 		/* adc == 0, default to 3pole if it stays
-		 * in this range for 60ms (20ms delays, 3 samples)
+		 * in this range for 40ms (20ms delays, 2 samples)
 		 */
 		.adc_high = 0,
-		.delay_ms = 20,
-		.check_count = 3,
+		.delay_ms = 0, /* delay 20ms in stmpe811 driver */
+		.check_count = 2,
 		.jack_type = SEC_HEADSET_3POLE,
 	},
 	{
@@ -1464,7 +1565,7 @@ static struct sec_jack_zone sec_jack_zones[] = {
 		 * in this range for a 400ms (20ms delays, 20 samples)
 		 */
 		.adc_high = 1199,
-		.delay_ms = 20,
+		.delay_ms = 0,
 		.check_count = 20,
 		.jack_type = SEC_HEADSET_3POLE,
 	},
@@ -1473,17 +1574,17 @@ static struct sec_jack_zone sec_jack_zones[] = {
 		 * stays in this range for 400ms (20ms delays, 20 samples)
 		 */
 		.adc_high = 2000,
-		.delay_ms = 20,
+		.delay_ms = 0,
 		.check_count = 20,
 		.jack_type = SEC_HEADSET_4POLE,
 	},
 	{
-		/* 2000 < adc <= 3800, 4 pole zone */
-		// as following new schemetics, margin is gone to 3800 instead of 3700
-		// 2011.05.26 by Rami Jung
+		/* 2000 < adc <= 3800, default to 4 pole if it stays */
+		/* in this range for 40ms (20ms delays, 2 samples)
+		 */
 		.adc_high = 3800,
-		.delay_ms = 20,
-		.check_count = 3,
+		.delay_ms = 0,
+		.check_count = 2,
 		.jack_type = SEC_HEADSET_4POLE,
 	},
 	{
@@ -1491,7 +1592,7 @@ static struct sec_jack_zone sec_jack_zones[] = {
 		 * in this range for a second (10ms delays, 100 samples)
 		 */
 		.adc_high = 0x7fffffff,
-		.delay_ms = 10,
+		.delay_ms = 0,
 		.check_count = 100,
 		.jack_type = SEC_HEADSET_3POLE,
 	},
@@ -1562,9 +1663,12 @@ struct platform_device sec_device_connector = {
 };
 #endif
 
+static struct platform_device p5_regulator_consumer = {
+	.name = "p5-regulator-consumer",
+	.id = -1,
+};
 
-
-#if defined(CONFIG_MACH_SAMSUNG_P5WIFI)	
+#if defined(CONFIG_MACH_SAMSUNG_P5WIFI)
 static struct platform_device *uart_wifi_devices[] __initdata = {
 		&tegra_uartd_device, /* uartd for wifi test mode support */
 };
@@ -1601,6 +1705,7 @@ static struct platform_device *p3_devices[] __initdata = {
 #if defined(CONFIG_TDMB) || defined(CONFIG_TDMB_MODULE)
 	&tegra_spi_device1,
 #endif
+	&p5_regulator_consumer,
 };
 
 static void p3_keys_init(void)
@@ -1892,17 +1997,9 @@ static int p3_check_touch_silence(void)
 };
 #endif
 #if defined(CONFIG_TOUCHSCREEN_MELFAS)
-static void touch_init_hw(void)
+static void register_tsp_callbacks(struct tsp_callbacks *cb)
 {
-	pr_info("%s\n", __func__);
-	gpio_request(GPIO_TOUCH_EN, "TOUCH_EN");
-	gpio_request(GPIO_TOUCH_INT, "TOUCH_INT");
-
-	gpio_direction_output(GPIO_TOUCH_EN, 1);
-	gpio_direction_input(GPIO_TOUCH_INT);
-
-	tegra_gpio_enable(GPIO_TOUCH_EN);
-	tegra_gpio_enable(GPIO_TOUCH_INT);
+	charger_callbacks = cb;
 }
 
 /*
@@ -1924,13 +2021,14 @@ static void melfas_touch_power_enable(int en)
 }
 
 static struct melfas_tsi_platform_data melfas_touch_platform_data = {
-	.max_x = 800,
-	.max_y = 1280,
+	.max_x = 799,
+	.max_y = 1279,
 	.max_pressure = 255,
 	.max_width = 255,
 	.gpio_scl = GPIO_TSP_SCL,
 	.gpio_sda = GPIO_TSP_SDA,
 	.power_enable = melfas_touch_power_enable,
+	.register_cb = register_tsp_callbacks,
 };
 
 static const struct i2c_board_info sec_i2c_touch_info[] = {
@@ -1941,9 +2039,37 @@ static const struct i2c_board_info sec_i2c_touch_info[] = {
 	},
 };
 
+static void touch_init_hw(void)
+{
+	pr_info("%s\n", __func__);
+	gpio_request(GPIO_TOUCH_EN, "TOUCH_EN");
+	gpio_request(GPIO_TOUCH_INT, "TOUCH_INT");
+
+	gpio_direction_output(GPIO_TOUCH_EN, 1);
+	gpio_direction_input(GPIO_TOUCH_INT);
+
+	tegra_gpio_enable(GPIO_TOUCH_EN);
+	tegra_gpio_enable(GPIO_TOUCH_INT);
+
+	if (system_rev < 0x9)
+#if defined(CONFIG_MACH_SAMSUNG_P5KORWIFI)
+		melfas_touch_platform_data.gpio_touch_id  = 1;
+#else
+		melfas_touch_platform_data.gpio_touch_id  = 0;
+#endif
+	else {
+		gpio_request(GPIO_TOUCH_ID, "TOUCH_ID");
+		gpio_direction_input(GPIO_TOUCH_ID);
+		tegra_gpio_enable(GPIO_TOUCH_ID);
+		melfas_touch_platform_data.gpio_touch_id  =
+			gpio_get_value(GPIO_TOUCH_ID);
+	}
+}
+
 static int __init touch_init(void)
 {
 	touch_init_hw();
+
 	i2c_register_board_info(0, sec_i2c_touch_info,
 					ARRAY_SIZE(sec_i2c_touch_info));
 
@@ -2159,11 +2285,11 @@ static void p3_usb_init(void)
   	val = gizmo_readl(AHB_GIZMO_AHB_MEM);
   	val |= ENB_FAST_REARBITRATE;
   	gizmo_writel(val, AHB_GIZMO_AHB_MEM);
-  
+
   	val = gizmo_readl(AHB_GIZMO_USB);
   	val |= IMMEDIATE;
   	gizmo_writel(val, AHB_GIZMO_USB);
-  
+
   	val = gizmo_readl(AHB_GIZMO_USB3);
   	val |= IMMEDIATE;
   	gizmo_writel(val, AHB_GIZMO_USB3);
@@ -2426,10 +2552,10 @@ static void tdmb_gpio_on(void)
 {
 	printk("tdmb_gpio_on\n");
 
-	gpio_request(GPIO_TDMB_EN, "TDMB_EN");
-	gpio_direction_output(GPIO_TDMB_EN, 0);
-	gpio_request(GPIO_TDMB_RST, "TDMB_RST");
-	gpio_direction_output(GPIO_TDMB_RST, 0);
+        tegra_gpio_disable(GPIO_TDMB_SPI_CS);
+        tegra_gpio_disable(GPIO_TDMB_SPI_CLK);
+        tegra_gpio_disable(GPIO_TDMB_SPI_MOSI);
+        tegra_gpio_disable(GPIO_TDMB_SPI_MISO);
 
 	gpio_set_value(GPIO_TDMB_EN, 1);
 	msleep(10);
@@ -2437,9 +2563,6 @@ static void tdmb_gpio_on(void)
 	msleep(2);
 	gpio_set_value(GPIO_TDMB_RST, 1);
 	msleep(10);
-
-	gpio_request(GPIO_TDMB_INT, "TDMB_INT");
-	gpio_direction_input(GPIO_TDMB_INT);
 }
 
 static void tdmb_gpio_off(void)
@@ -2450,9 +2573,14 @@ static void tdmb_gpio_off(void)
 	msleep(1);
 	gpio_set_value(GPIO_TDMB_EN, 0);
 
-	gpio_free(GPIO_TDMB_RST);
-	gpio_free(GPIO_TDMB_EN);
-	gpio_free(GPIO_TDMB_INT);
+	tegra_gpio_enable(GPIO_TDMB_SPI_CS);
+	tegra_gpio_enable(GPIO_TDMB_SPI_CLK);
+	tegra_gpio_enable(GPIO_TDMB_SPI_MOSI);
+	tegra_gpio_enable(GPIO_TDMB_SPI_MISO);
+	gpio_set_value(GPIO_TDMB_SPI_CS, 0);
+	gpio_set_value(GPIO_TDMB_SPI_CLK, 0);
+	gpio_set_value(GPIO_TDMB_SPI_MOSI, 0);
+	gpio_set_value(GPIO_TDMB_SPI_MISO, 0);
 }
 
 static struct tdmb_platform_data tdmb_pdata = {
@@ -2501,11 +2629,12 @@ static int __init p5_tdmb_init(void)
 	tegra_gpio_enable(GPIO_TDMB_EN);
 	tegra_gpio_enable(GPIO_TDMB_INT);
 
-        /* reserved for TDMB SPI */
-        tegra_gpio_disable(TEGRA_GPIO_PT2);
-        tegra_gpio_disable(TEGRA_GPIO_PT3);
-        tegra_gpio_disable(TEGRA_GPIO_PBB4);
-        tegra_gpio_disable(TEGRA_GPIO_PBB5);
+	gpio_request(GPIO_TDMB_EN, "TDMB_EN");
+	gpio_direction_output(GPIO_TDMB_EN, 0);
+	gpio_request(GPIO_TDMB_RST, "TDMB_RST");
+	gpio_direction_output(GPIO_TDMB_RST, 0);
+	gpio_request(GPIO_TDMB_INT, "TDMB_INT");
+	gpio_direction_input(GPIO_TDMB_INT);
 
 	platform_device_register(&tdmb_device);
 
@@ -2538,17 +2667,22 @@ static void p3_power_off(void)
 	/* prevent leakage current after power off */
 	if (system_rev >= 9)
 		gpio_set_value(GPIO_ACC_EN, 0);
+	mdelay(50);
 
 	value = gpio_get_value(GPIO_TA_nCONNECTED);
 	if(!value) {
-		pr_info("%s: TA_nCONNECTED! Reset!\n", __func__);
-		tps6586x_soft_rst();
+		pr_debug("%s: TA_nCONNECTED! Reset!\n", __func__);
+		ret = tps6586x_soft_rst();
+		if (ret)
+			pr_err("p3: failed to tps6586x_soft_rst(ret:%d)\n", ret);
+	} else {
+		ret = tps6586x_power_off();
+		if (ret)
+			pr_err("p3: failed to power off(ret:%d)\n", ret);
 	}
 
-	ret = tps6586x_power_off();
-	if (ret)
-		pr_err("p3: failed to power off\n");
-
+	mdelay(1000);
+	pr_alert("p3: system halted.\n");
 	while (1)
 		;
 
@@ -2752,6 +2886,18 @@ static void __init tegra_p3_init(void)
 
 }
 
+#ifdef CONFIG_TARGET_LOCALE_KOR
+MACHINE_START(SAMSUNG_P3, MODELNAME)
+    .boot_params    = 0x00000100,
+    .phys_io        = IO_APB_PHYS,
+    .io_pg_offst    = ((IO_APB_VIRT) >> 18) & 0xfffc,
+    .init_irq       = tegra_init_irq,
+    .init_machine   = tegra_p3_init,
+    .map_io         = tegra_map_common_io,
+    .reserve        = p3_reserve,
+    .timer          = &tegra_timer,
+MACHINE_END
+#else
 MACHINE_START(SAMSUNG_P3, "p3")
 	.boot_params    = 0x00000100,
 	.phys_io        = IO_APB_PHYS,
@@ -2762,3 +2908,4 @@ MACHINE_START(SAMSUNG_P3, "p3")
 	.reserve        = p3_reserve,
 	.timer          = &tegra_timer,
 MACHINE_END
+#endif

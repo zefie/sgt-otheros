@@ -129,6 +129,7 @@
 
 #define UTMIP_XCVR_CFG0		0x808
 #define   UTMIP_XCVR_SETUP(x)			(((x) & 0xf) << 0)
+#define   UTMIP_XCVR_FSSLEW(x)			(((x) & 0x3) << 6)
 #define   UTMIP_XCVR_LSRSLEW(x)			(((x) & 0x3) << 8)
 #define   UTMIP_XCVR_LSFSLEW(x)			(((x) & 0x3) << 10)
 #define   UTMIP_FORCE_PD_POWERDOWN		(1 << 14)
@@ -270,10 +271,12 @@ static struct tegra_utmip_config utmip_default[] = {
 		.idle_wait_delay = 17,
 		.elastic_limit = 16,
 		.term_range_adj = 6,
-#if defined(CONFIG_MACH_SAMSUNG_P5SKT)
+#if defined(CONFIG_MACH_SAMSUNG_P5SKT) ||defined(CONFIG_MACH_SAMSUNG_P5KORWIFI)
+		.xcvr_setup = 14,
+#elif defined(CONFIG_MACH_SAMSUNG_P5) ||defined(CONFIG_MACH_SAMSUNG_P5WIFI)
+		.xcvr_setup = 14,
+#elif defined(CONFIG_MACH_SAMSUNG_P4) ||defined(CONFIG_MACH_SAMSUNG_P4WIFI)
 		.xcvr_setup = 13,
-#elif defined(CONFIG_MACH_SAMSUNG_P5)
-		.xcvr_setup = 15,
 #elif defined(CONFIG_MACH_SAMSUNG_P4LTE)
 		.xcvr_setup = 12,
 #else
@@ -281,16 +284,19 @@ static struct tegra_utmip_config utmip_default[] = {
 #endif
 		.xcvr_lsfslew = 1,
 		.xcvr_lsrslew = 1,
+		.xcvr_fsslew = 3,
 	},
 	[2] = {
 		.hssync_start_delay = 9,
 		.idle_wait_delay = 17,
 		.elastic_limit = 16,
 		.term_range_adj = 6,
-#if defined(CONFIG_MACH_SAMSUNG_P5SKT)
+#if defined(CONFIG_MACH_SAMSUNG_P5SKT) ||defined(CONFIG_MACH_SAMSUNG_P5KORWIFI)
+		.xcvr_setup = 14,
+#elif defined(CONFIG_MACH_SAMSUNG_P5) ||defined(CONFIG_MACH_SAMSUNG_P5WIFI)
+		.xcvr_setup = 14,
+#elif defined(CONFIG_MACH_SAMSUNG_P4) ||defined(CONFIG_MACH_SAMSUNG_P4WIFI)
 		.xcvr_setup = 13,
-#elif defined(CONFIG_MACH_SAMSUNG_P5)
-		.xcvr_setup = 15,
 #else
 		.xcvr_setup = 9,
 #endif
@@ -529,7 +535,7 @@ static void utmi_phy_power_on(struct tegra_usb_phy *phy)
 	}
 
 	val = readl(base + UTMIP_TX_CFG0);
-	val &= ~UTMIP_FS_PREABMLE_J;
+	val |= UTMIP_FS_PREABMLE_J;
 	writel(val, base + UTMIP_TX_CFG0);
 
 	val = readl(base + UTMIP_HSRX_CFG0);
@@ -576,10 +582,11 @@ static void utmi_phy_power_on(struct tegra_usb_phy *phy)
 	val &= ~(UTMIP_FORCE_PD_POWERDOWN | UTMIP_FORCE_PD2_POWERDOWN |
 		 UTMIP_FORCE_PDZI_POWERDOWN | UTMIP_XCVR_SETUP(~0) |
 		 UTMIP_XCVR_LSFSLEW(~0) | UTMIP_XCVR_LSRSLEW(~0) |
-		 UTMIP_XCVR_HSSLEW_MSB(~0));
+		 UTMIP_XCVR_FSSLEW(~0) | UTMIP_XCVR_HSSLEW_MSB(~0));
 	val |= UTMIP_XCVR_SETUP(config->xcvr_setup);
 	val |= UTMIP_XCVR_LSFSLEW(config->xcvr_lsfslew);
 	val |= UTMIP_XCVR_LSRSLEW(config->xcvr_lsrslew);
+	val |= UTMIP_XCVR_FSSLEW(config->xcvr_fsslew);
 	writel(val, base + UTMIP_XCVR_CFG0);
 
 	val = readl(base + UTMIP_XCVR_CFG1);
@@ -757,7 +764,7 @@ static void ulpi_phy_power_on(struct tegra_usb_phy *phy)
 	void __iomem *base = phy->regs;
 	struct tegra_ulpi_config *config = phy->config;
 	printk("%s() called. instance : %d\n",__func__,phy->instance);
-    
+
 	gpio_direction_output(config->reset_gpio, 0);
 	msleep(5);
 	gpio_direction_output(config->reset_gpio, 1);
@@ -1025,7 +1032,11 @@ retry:
 							USB_PHY_CLK_VALID))
 		pr_err("%s: timeout waiting for phy to stabilize\n", __func__);
 
-	printk("%s:clocking success for hsic portsc1: %x \n",__func__, 
+#if defined(CONFIG_MACH_SAMSUNG_VARIATION_TEGRA) && !defined(CONFIG_MACH_SAMSUNG_P4LTE)
+	/* add delay for stable port status */
+	mdelay(5);
+#endif
+	printk("%s:clocking success for hsic portsc1: %x \n",__func__,
 		readl(base + USB_PORTSC1));
 
 #if defined(CONFIG_MACH_SAMSUNG_VARIATION_TEGRA) && !defined(CONFIG_MACH_SAMSUNG_P4LTE)
@@ -1200,7 +1211,7 @@ static int usb_enable_phy_clk(struct tegra_usb_phy *phy)
 	int val;
 	int ret;
 	void __iomem *addr = phy->regs + USB_SUSP_CTRL;
- 
+
 	/* USB_SUSP_CLR bit requires pulse write */
 
 	val = readl(addr);
@@ -1469,7 +1480,14 @@ int tegra_usb_phy_bus_reset(struct tegra_usb_phy *phy)
 
 	if ((phy->instance == 1) &&
 		(config->inf_type == TEGRA_USB_UHSIC)) {
-
+#if defined(CONFIG_MACH_SAMSUNG_VARIATION_TEGRA) && !defined(CONFIG_MACH_SAMSUNG_P4LTE)
+		/* without connect staus (eg. cp crash state), do not need bus reset */
+		if (!((readl(base + UHSIC_STAT_CFG0) & UHSIC_CONNECT_DETECT)
+				== UHSIC_CONNECT_DETECT)) {
+			pr_err("%s: hsic is not in connect status\n", __func__);
+			return -ENOTCONN;
+		}
+#endif
 		val = readl(base + USB_PORTSC1);
 		val |= USB_PORTSC1_PTC(5);
 		writel(val, base + USB_PORTSC1);
@@ -1659,6 +1677,14 @@ bool tegra_usb_phy_is_device_connected(struct tegra_usb_phy *phy)
 	if ((phy->instance == 1) &&
 		(config->inf_type == TEGRA_USB_UHSIC)) {
 #if defined(CONFIG_MACH_SAMSUNG_VARIATION_TEGRA) && !defined(CONFIG_MACH_SAMSUNG_P4LTE)
+		/* at cp crash this routine will block bus reset,
+		* so, return true and check connect status at bus reset
+		*/
+		if (!gpio_get_value(GPIO_PHONE_ACTIVE)) {
+			pr_err("%s:return true for reset at cp crash\n", __func__);
+			return true;
+		}
+
 		if (utmi_wait_register(base + UHSIC_STAT_CFG0,
 					UHSIC_CONNECT_DETECT,
 					UHSIC_CONNECT_DETECT) < 0) {

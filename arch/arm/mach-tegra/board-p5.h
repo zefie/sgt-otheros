@@ -55,6 +55,10 @@
 #  endif
 #  define       ANDROID_UMS_CONFIG_STRING	 "UMS Only (Not debugging mode)"
 #  define       ANDROID_MTP_CONFIG_STRING	 "MTP Only (Not debugging mode)"
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+#    define ANDROID_ACCESSORY_CONFIG_STRING		"ACCESSORY Only(ADK mode)"
+#    define ANDROID_ACCESSORY_ADB_CONFIG_STRING	"ACCESSORY _ADB (ADK + ADB mode)"
+#endif
 #  ifdef CONFIG_USB_ANDROID_SAMSUNG_RNDIS_WITH_MS_COMPOSITE
 #    define       ANDROID_RNDIS_CONFIG_STRING	 "RNDIS + UMS (Not debugging mode)"
 #  else
@@ -70,6 +74,9 @@
 #  define USBSTATUS_DM				0x20
 #  define USBSTATUS_ACM				0x40
 #  define USBSTATUS_SAMSUNG_KIES_REAL		0x80
+#ifdef CONFIG_USB_ANDROID_ACCESSORY
+#  define USBSTATUS_ACCESSORY			0x100
+#endif
 
 /* soonyong.cho : This is for setting unique serial number */
 //void __init s3c_usb_set_serial(void);
