@@ -181,6 +181,14 @@ do {     \
 	input_mt_sync(mxt->input);                                      \
 } while (0)
 
+#define REPORT_ST(x, y, pressure) \
+do {     \
+	input_report_abs(mxt->input, ABS_X, x);             \
+	input_report_abs(mxt->input, ABS_Y, y);             \
+	input_report_abs(mxt->input, ABS_PRESSURE, pressure);         \
+	input_sync(mxt->input);                                      \
+} while (0)
+
 const u8 *maxtouch_family = "maXTouch";
 const u8 *mxt224_variant  = "mXT1386";
 
@@ -866,10 +874,11 @@ static void process_T9_message(struct mxt_data *mxt, u8 *message)
 				mtouch_info[i].pressure, mtouch_info[i].size);
 			/*input_sync(input);*/
 
+			REPORT_ST(mtouch_info[i].x, mtouch_info[i].y, (int)mtouch_info[i].pressure);
+
 			if (mtouch_info[i].pressure == 0)/* if released*/
 				mtouch_info[i].pressure = -1;
 		}
-		input_sync(input);
 	}
 	prev_touch_id = touch_id;
 
@@ -3069,8 +3078,18 @@ static int __devinit mxt_probe(struct i2c_client *client,
 		pr_info("maXTouch phys: \"%s\"\n", input->phys);
 		pr_info("maXTouch driver setting abs parameters\n");
 	}
-	__set_bit(BTN_TOUCH, input->keybit);
 	__set_bit(EV_ABS, input->evbit);
+	__set_bit(EV_KEY, input->evbit);
+	__set_bit(BTN_TOUCH, input->keybit);
+
+
+        /* For single touch */
+        input_set_abs_params(input, ABS_X,
+                             0, mxt->pdata->max_x, 0, 0);
+        input_set_abs_params(input, ABS_Y,
+                             0, mxt->pdata->max_y, 0, 0);
+        input_set_abs_params(input, ABS_PRESSURE,
+                             0, 255, 0, 0);
 
 	/* multi touch */
 	input_set_abs_params(input, ABS_MT_POSITION_X, 0,
