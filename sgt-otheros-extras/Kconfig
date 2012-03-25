@@ -9,6 +9,31 @@ menuconfig SGT_OTHEROS
 
 
 if SGT_OTHEROS
+	
+menuconfig SGT_MOUSEMODE
+	bool "SGT-OtherOS Touchscreen MouseMode"
+	default y
+	---help---
+	  Emulates a mouse using the touchscreen. When enabled, controls
+	  are as follows:
+
+		Light Touch: Move Mouse
+		Hard Touch: Left Button Down (lift finger to release)
+		Light Touch + 2nd Finger = Right Click @ 1st Finger
+		3 Finger Tap = Toggle MouseMode
+
+	  When mousemode is off, driver functions as a normal touchscreen,
+	  Left Button is always down regardless of touch pressure.
+
+if SGT_MOUSEMODE
+config SGT_MOUSEMODE_DEFAULT
+	bool "SGT-OtherOS Touchscreen MouseMode Default"
+	default y
+	---help---
+	  Defaults to MouseMode. Set to N to default to standard touchscreen.
+
+
+endif # SGT_MOUSEMODE
 
 config SGT_DEBUG
 	bool "SGT-OtherOS Debugging"
@@ -17,6 +42,7 @@ config SGT_DEBUG
 	  Toggles some of zefie's added kernel debugging, mainly dumps
 	  detailed information about hardware. You can safely disable
 	  this if you are not interested in development.
+
 
 
 source "sgt-otheros-extras/compcache-0.6.2/Kconfig"

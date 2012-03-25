@@ -25,7 +25,11 @@
  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#define MOUSEMODE_DEFAULT 1
+#ifdef MOUSEMODE_ENABLED
+	#ifndef MOUSEMODE_DEFAULT
+		#define MOUSEMODE_DEFAULT 0
+	#endif
+#endif
 #define	DEBUG_INFO      1
 #define	DEBUG_VERBOSE   2
 #define	DEBUG_MESSAGES  5
@@ -138,6 +142,9 @@ static int debug = DEBUG_INFO;
 static int debug = DEBUG_TRACE;  /* for debugging*/
 #endif
 
+static int8_t mousemode = MOUSEMODE_DEFAULT;
+
+
 #define MXT_MESSAGE_LENGTH 8
 
 module_param(debug, int, 0644);
@@ -222,7 +229,6 @@ struct multi_touch_info {
 	int16_t x;
 	int16_t y;
 	int8_t pressed;
-	int8_t mousemode;
 };
 
 static struct multi_touch_info mtouch_info[MXT_MAX_NUM_TOUCHES];
@@ -872,7 +878,11 @@ static void process_T9_message(struct mxt_data *mxt, u8 *message)
 			/*input_sync(input);*/
 
 			if (i == 0) {
-				if ((mtouch_info[i].pressure >= 65 || mtouch_info[0].mousemode == 0) && mtouch_info[i].pressed == 0) {
+				#ifdef MOUSEMODE_ENABLED
+					if ((mtouch_info[i].pressure >= 65 || mousemode == 0) && mtouch_info[i].pressed == 0) {
+				#else
+					if (mtouch_info[i].pressure > 10 && mtouch_info[i].pressed == 0) {
+				#endif
 				        input_report_key(input, BTN_TOUCH, 1);
 					mtouch_info[i].pressed = 1;
 					#ifdef SGTDEBUG
@@ -889,43 +899,44 @@ static void process_T9_message(struct mxt_data *mxt, u8 *message)
 				REPORT_ST(mtouch_info[i].x, mtouch_info[i].y, (int)mtouch_info[i].pressure);
 			}
 
-			if (i == 1 && mtouch_info[0].mousemode == 1) {
-				if (mtouch_info[i].pressure > 0 && mtouch_info[i].pressed == 0 && mtouch_info[0].pressed == 0) {
-				        input_report_key(input, BTN_2, 1);
-					mtouch_info[i].pressed = 1;
-					#ifdef SGTDEBUG
-						pr_info("[SGT-OtherOS] report_key: BTN_2 %d (pressure: %d)",mtouch_info[i].pressed,mtouch_info[i].pressure);
-					#endif
-				}
-				if (mtouch_info[i].pressure == 0 && mtouch_info[i].pressed == 1) {
-				        input_report_key(input, BTN_2, 0);
-					mtouch_info[i].pressed = 0;
-					#ifdef SGTDEBUG
-						pr_info("[SGT-OtherOS] report_key: BTN_2 %d (pressure: %d)",mtouch_info[i].pressed,mtouch_info[i].pressure);
-					#endif
-				}
-			}
-
-			if (i == 2) {
-				// 3 finger tap, toggles mouse emulation mode
-
-				if (mtouch_info[i].pressure > 0 && mtouch_info[i].pressed == 0) {
-					mtouch_info[i].pressed = 1;
-					if (mtouch_info[0].mousemode == 1) {
-						mtouch_info[0].mousemode = 0;
+			#ifdef MOUSEMODE_ENABLED
+				if (i == 1 && mousemode == 1) {
+					if (mtouch_info[i].pressure > 0 && mtouch_info[i].pressed == 0 && mtouch_info[0].pressed == 0) {
+					        input_report_key(input, BTN_2, 1);
+						mtouch_info[i].pressed = 1;
+						#ifdef SGTDEBUG
+							pr_info("[SGT-OtherOS] report_key: BTN_2 %d (pressure: %d)",mtouch_info[i].pressed,mtouch_info[i].pressure);
+						#endif
 					}
-					if (mtouch_info[0].mousemode == 0) {
-						mtouch_info[0].mousemode = 1;
+					if (mtouch_info[i].pressure == 0 && mtouch_info[i].pressed == 1) {
+					        input_report_key(input, BTN_2, 0);
+						mtouch_info[i].pressed = 0;
+						#ifdef SGTDEBUG
+							pr_info("[SGT-OtherOS] report_key: BTN_2 %d (pressure: %d)",mtouch_info[i].pressed,mtouch_info[i].pressure);
+						#endif
 					}
-					#ifdef SGTDEBUG
-						pr_info("[SGT-OtherOS] set mousemode %d",mtouch_info[0].mousemode);
-					#endif
 				}
 
-				if (mtouch_info[i].pressure == 0 && mtouch_info[i].pressed == 1) {
-					mtouch_info[i].pressed = 0;
+				if (i == 2) {
+					// 3 finger tap, toggles mouse emulation mode
+
+					if (mtouch_info[i].pressure > 0 && mtouch_info[i].pressed == 0) {
+						mtouch_info[i].pressed = 1;
+						if (mousemode == 1) {
+							mousemode = 0;
+						} else {
+							mousemode = 1;
+						}
+						#ifdef SGTDEBUG
+							pr_info("[SGT-OtherOS] set mousemode %d",mousemode);
+						#endif
+					}
+
+					if (mtouch_info[i].pressure == 0 && mtouch_info[i].pressed == 1) {
+						mtouch_info[i].pressed = 0;
+					}
 				}
-			}
+			#endif
 
 			if (mtouch_info[i].pressure == 0)/* if released*/
 				mtouch_info[i].pressure = -1;
@@ -2712,8 +2723,6 @@ retry_i2c:
 		"number of objects: %d\n",
 		mxt->device_info.num_objs
 	);
-
-	mtouch_info[0].mousemode = MOUSEMODE_DEFAULT;
 
 	return identified;
 }
