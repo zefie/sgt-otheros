@@ -21,6 +21,7 @@
 #include <linux/i2c.h>
 #include <linux/seq_file.h>
 #include <linux/vmalloc.h>
+#include <linux/kref.h>
 
 #include "edid.h"
 
@@ -270,7 +271,7 @@ int tegra_edid_get_monspecs_hdmi_checker(struct tegra_edid *edid, struct fb_mons
 	int use_default = 0;
 
 	printk(KERN_INFO "[HDMI] %s()\n", __func__);
-	
+
 	edid->support_stereo = 0;
 
 	ret = tegra_edid_read_block(edid, 0, edid->data);
@@ -325,6 +326,13 @@ EXPORT_SYMBOL(tegra_edid_get_monspecs_hdmi_checker);
 #endif
 
 
+static void data_release(struct kref *ref)
+{
+//        struct tegra_dc_edid *data = container_of(ref, struct tegra_dc_edid, refcnt);
+//        vfree(data);
+}
+
+
 int tegra_edid_get_monspecs(struct tegra_edid *edid, struct fb_monspecs *specs)
 {
 	int i;
@@ -333,7 +341,7 @@ int tegra_edid_get_monspecs(struct tegra_edid *edid, struct fb_monspecs *specs)
 	int extension_blocks;
 
 	printk(KERN_INFO "[HDMI] %s()\n", __func__);
-	
+
 	edid->support_stereo = 0;
 
 	ret = tegra_edid_read_block(edid, 0, edid->data);
@@ -433,6 +441,26 @@ void tegra_edid_destroy(struct tegra_edid *edid)
 	vfree(edid->data);
 	kfree(edid);
 }
+
+struct tegra_dc_edid *tegra_edid_get_data(struct tegra_edid *edid)
+{
+//        struct tegra_dc_edid *data;
+//
+//        mutex_lock(&edid->lock);
+//        data = edid->data;
+//        if (data)
+//                kref_get(&data->refcnt);
+//        mutex_unlock(&edid->lock);
+//
+//        return data;
+}
+
+void tegra_edid_put_data(struct tegra_dc_edid *data)
+{
+//       if (data)
+//                kref_put(&data->refcnt, data_release);
+}
+
 
 static const struct i2c_device_id tegra_edid_id[] = {
         { "tegra_edid", 0 },

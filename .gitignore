@@ -30,7 +30,6 @@
 *.patch
 *.gcno
 *.str.tmp
-scripts/
 
 #
 # Top-level generic files

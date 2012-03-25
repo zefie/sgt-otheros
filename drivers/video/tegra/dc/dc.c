@@ -375,6 +375,13 @@ struct tegra_dc_win *tegra_dc_get_window(struct tegra_dc *dc, unsigned win)
 }
 EXPORT_SYMBOL(tegra_dc_get_window);
 
+bool tegra_dc_get_connected(struct tegra_dc *dc)
+{
+        return dc->connected;
+}
+EXPORT_SYMBOL(tegra_dc_get_connected);
+
+
 static int get_topmost_window(u32 *depths, unsigned long *wins)
 {
 	int idx, best = -1;
@@ -463,6 +470,30 @@ static void tegra_dc_set_csc(struct tegra_dc *dc)
 	tegra_dc_writel(dc, 0x0204, DC_WIN_CSC_KUB);
 	tegra_dc_writel(dc, 0x0000, DC_WIN_CSC_KVB);
 }
+
+
+int tegra_dc_update_csc(struct tegra_dc *dc, int win_idx)
+{
+        mutex_lock(&dc->lock);
+
+        if (!dc->enabled) {
+                mutex_unlock(&dc->lock);
+                return -EFAULT;
+        }
+
+        tegra_dc_writel(dc, WINDOW_A_SELECT << win_idx,
+                        DC_CMD_DISPLAY_WINDOW_HEADER);
+
+//        tegra_dc_set_csc(dc, &dc->windows[win_idx].csc);
+        tegra_dc_set_csc(dc);
+
+        mutex_unlock(&dc->lock);
+        mutex_unlock(&dc->lock);
+
+        return 0;
+}
+EXPORT_SYMBOL(tegra_dc_update_csc);
+
 
 static void tegra_dc_set_scaling_filter(struct tegra_dc *dc)
 {

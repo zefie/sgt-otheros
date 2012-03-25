@@ -21,9 +21,22 @@
 #define __MACH_TEGRA_DC_H
 
 #include <linux/pm.h>
+#include <linux/kref.h>
 
 #define TEGRA_MAX_DC		2
 #define DC_N_WINDOWS		3
+
+
+struct tegra_dc_csc {
+        unsigned short yof;
+        unsigned short kyrgb;
+        unsigned short kur;
+        unsigned short kvr;
+        unsigned short kug;
+        unsigned short kvg;
+        unsigned short kub;
+        unsigned short kvb;
+};
 
 
 /* DSI pixel data format */
@@ -285,6 +298,7 @@ struct tegra_dc_win {
 	unsigned		out_h;
 	unsigned		z;
 
+        struct tegra_dc_csc     csc;
 	int			dirty;
 	int			underflows;
 	struct tegra_dc		*dc;
@@ -354,8 +368,12 @@ struct tegra_dc_platform_data {
 
 #define TEGRA_DC_FLAG_ENABLED		(1 << 0)
 
+int tegra_dc_update_csc(struct tegra_dc *dc, int win_index);
+
 struct tegra_dc *tegra_dc_get_dc(unsigned idx);
 struct tegra_dc_win *tegra_dc_get_window(struct tegra_dc *dc, unsigned win);
+
+bool tegra_dc_get_connected(struct tegra_dc *);
 
 void tegra_dc_enable(struct tegra_dc *dc);
 void tegra_dc_disable(struct tegra_dc *dc);
@@ -389,5 +407,21 @@ struct tegra_dc_pwm_params {
 };
 
 void tegra_dc_config_pwm(struct tegra_dc *dc, struct tegra_dc_pwm_params *cfg);
+
+
+/*
+ * In order to get a dc's current EDID, first call tegra_dc_get_edid() from an
+ * interruptible context.  The returned value (if non-NULL) points to a
+ * snapshot of the current state; after copying data from it, call
+ * tegra_dc_put_edid() on that pointer.  Do not dereference anything through
+ * that pointer after calling tegra_dc_put_edid().
+ */
+struct tegra_dc_edid {
+        size_t          len;
+        struct kref     refcnt;
+        u8              buf[0];
+};
+struct tegra_dc_edid *tegra_dc_get_edid(struct tegra_dc *dc);
+void tegra_dc_put_edid(struct tegra_dc_edid *edid);
 
 #endif

@@ -36,6 +36,7 @@
 #include <mach/fb.h>
 #include <mach/nvhost.h>
 #include <mach/nvmap.h>
+#include <drm/drm_fixed.h>
 
 #include "host/dev.h"
 #include "nvmap/nvmap.h"
@@ -209,6 +210,34 @@ static int tegra_fb_blank(int blank, struct fb_info *info)
 		return -ENOTTY;
 	}
 }
+
+static void tegra_fb_flip_win(struct tegra_fb_info *tegra_fb)
+{
+        struct tegra_dc_win *win = tegra_fb->win;
+        struct fb_info *info = tegra_fb->info;
+
+        if (!tegra_fb->valid)
+                return;
+
+        win->x = dfixed_const(0);
+        win->y = dfixed_const(0);
+        win->w = dfixed_const(tegra_fb->xres);
+        win->h = dfixed_const(tegra_fb->yres);
+        /* TODO: set to output res dc */
+        win->out_x = 0;
+        win->out_y = 0;
+}
+
+static void tegra_fb_unflip_win(struct tegra_fb_info *tegra_fb)
+{
+        struct tegra_dc_win *win = tegra_fb->win;
+
+        win->flags &= ~TEGRA_WIN_FLAG_ENABLED;
+
+        tegra_dc_update_windows(&tegra_fb->win, 1);
+        tegra_dc_sync_windows(&tegra_fb->win, 1);
+}
+
 
 static int tegra_fb_pan_display(struct fb_var_screeninfo *var,
 				struct fb_info *info)
@@ -519,3 +548,17 @@ void tegra_fb_unregister(struct tegra_fb_info *fb_info)
 	iounmap(info->screen_base);
 	framebuffer_release(info);
 }
+
+void tegra_fb_transition(struct tegra_fb_info *tegra_fb, bool enable)
+{
+        if (!tegra_fb->fb_mem)
+                return;
+
+        tegra_fb->valid = enable;
+        if (enable)
+                tegra_fb_flip_win(tegra_fb);
+        else
+                tegra_fb_unflip_win(tegra_fb);
+}
+EXPORT_SYMBOL(tegra_fb_transition);
+
