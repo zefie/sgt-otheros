@@ -2132,6 +2132,7 @@ void wm8994_record_main_mic(struct snd_soc_codec *codec)
 void wm8994_record_bluetooth(struct snd_soc_codec *codec)
 {
 #if 0
+
 	u16 val;
 
 	DEBUG_LOG("BT Record Path for Voice Command\n");
@@ -3142,7 +3143,6 @@ void wm8994_set_playback_extra_dock_speaker(struct snd_soc_codec *codec)
 
 void wm8994_set_playback_speaker_lineout(struct snd_soc_codec *codec)
 {
-	struct wm8994_priv *wm8994 = codec->drvdata;
 	u16 val;
 	DEBUG_LOG("");	
 

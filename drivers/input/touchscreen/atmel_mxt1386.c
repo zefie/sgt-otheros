@@ -913,16 +913,13 @@ static void process_T9_message(struct mxt_data *mxt, u8 *message)
 					mtouch_info[i].pressed = 1;
 					if (mtouch_info[0].mousemode == 1) {
 						mtouch_info[0].mousemode = 0;
-						#ifdef SGTDEBUG
-							pr_info("[SGT-OtherOS] mousemode 0");
-						#endif
 					}
 					if (mtouch_info[0].mousemode == 0) {
 						mtouch_info[0].mousemode = 1;
-						#ifdef SGTDEBUG
-							pr_info("[SGT-OtherOS] mousemode 1");
-						#endif
 					}
+					#ifdef SGTDEBUG
+						pr_info("[SGT-OtherOS] set mousemode %d",mtouch_info[0].mousemode);
+					#endif
 				}
 
 				if (mtouch_info[i].pressure == 0 && mtouch_info[i].pressed == 1) {
