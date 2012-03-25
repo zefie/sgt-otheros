@@ -225,6 +225,7 @@ struct multi_touch_info {
 	int16_t pressure;
 	int16_t x;
 	int16_t y;
+	int8_t pressed;
 };
 
 static struct multi_touch_info mtouch_info[MXT_MAX_NUM_TOUCHES];
@@ -396,7 +397,6 @@ static void mxt_ta_worker(struct work_struct *work)
 		}
 	}
 
-	pr_info("[TSP] frequency table \n", freq[i]);
 	for (i = 0; i < 5; i++)
 		pr_info("[TSP] frequency[%d] : %u\n", i, freq[i]);
 
@@ -818,8 +818,7 @@ static void process_T9_message(struct mxt_data *mxt, u8 *message)
 	- mxt->rid_map[report_id].first_rid;*/
 	if (status & MXT_MSGB_T9_DETECT) {  /* case 1: detected */
 		 /* touch amplitude */
-		mtouch_info[touch_id].pressure
-					= message[MXT_MSG_T9_TCHAMPLITUDE];
+		mtouch_info[touch_id].pressure = message[MXT_MSG_T9_TCHAMPLITUDE];
 		mtouch_info[touch_id].x = (int16_t)xpos;
 		mtouch_info[touch_id].y = (int16_t)ypos;
 
@@ -847,6 +846,7 @@ static void process_T9_message(struct mxt_data *mxt, u8 *message)
 		pressed_or_released = 1;
 		mtouch_info[touch_id].pressure = 0;
 		pr_info("mxt %d r\n", touch_id);
+
 	} else if (status & MXT_MSGB_T9_SUPPRESS) {  /* case 3: suppressed */
 		/*
 		 * Atmel's recommendation:
@@ -874,13 +874,39 @@ static void process_T9_message(struct mxt_data *mxt, u8 *message)
 				mtouch_info[i].pressure, mtouch_info[i].size);
 			/*input_sync(input);*/
 
-			REPORT_ST(mtouch_info[i].x, mtouch_info[i].y, (int)mtouch_info[i].pressure);
+			if (i == 0) {
+				if (mtouch_info[i].pressure >= 60 && mtouch_info[i].pressed == 0) {
+				        input_report_key(input, BTN_TOUCH, 1);
+					mtouch_info[i].pressed = 1;
+					pr_info("[SGT-OtherOS] report_key: BTN_TOUCH %d (pressure: %d)",mtouch_info[i].pressed,mtouch_info[i].pressure);
+				}
+				if (mtouch_info[i].pressure < 60 && mtouch_info[i].pressed == 1) {
+				        input_report_key(input, BTN_TOUCH, 0);
+					mtouch_info[i].pressed = 0;
+					pr_info("[SGT-OtherOS] report_key: BTN_TOUCH %d (pressure: %d)",mtouch_info[i].pressed,mtouch_info[i].pressure);
+				}
+				REPORT_ST(mtouch_info[i].x, mtouch_info[i].y, (int)mtouch_info[i].pressure);
+			}
+
+			if (i == 1) {
+				if (mtouch_info[i].pressure >= 0 && mtouch_info[i].pressed == 0 && mtouch_info[0].pressed == 0) {
+				        input_report_key(input, BTN_2, 1);
+					mtouch_info[i].pressed = 1;
+					pr_info("[SGT-OtherOS] report_key: BTN_2 %d (pressure: %d)",mtouch_info[i].pressed,mtouch_info[i].pressure);
+				}
+				if (mtouch_info[i].pressure == 0 && mtouch_info[i].pressed == 1) {
+				        input_report_key(input, BTN_2, 0);
+					mtouch_info[i].pressed = 0;
+					pr_info("[SGT-OtherOS] report_key: BTN_2 %d (pressure: %d)",mtouch_info[i].pressed,mtouch_info[i].pressure);
+				}
+			}
 
 			if (mtouch_info[i].pressure == 0)/* if released*/
 				mtouch_info[i].pressure = -1;
 		}
 	}
 	prev_touch_id = touch_id;
+
 
 	if (debug >= DEBUG_TRACE) {
 		char msg[64] = {0};
@@ -2680,7 +2706,7 @@ static int __devinit mxt_read_object_table(struct i2c_client *client,
 	u8	object_report_ids;
 	u16	object_info_address;
 	u32	crc;
-	u32     crc_calculated;
+	u32     crc_calculated = 0x000;
 	int	i;
 	int	error;
 
@@ -3081,6 +3107,7 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	__set_bit(EV_ABS, input->evbit);
 	__set_bit(EV_KEY, input->evbit);
 	__set_bit(BTN_TOUCH, input->keybit);
+	__set_bit(BTN_2, input->keybit);
 
 
         /* For single touch */
