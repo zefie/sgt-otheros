@@ -79,3 +79,10 @@ GTAGS
 \#*#
 
 lib/modules/
+modules.builtin
+arch/arm/boot/Image
+arch/arm/boot/zImage
+arch/arm/boot/compressed/lib1funcs.S
+arch/arm/boot/compressed/vmlinux.lds
+arch/arm/kernel/vmlinux.lds
+
