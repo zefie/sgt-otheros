@@ -25,6 +25,7 @@
  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#define MOUSEMODE_DEFAULT 1
 #define	DEBUG_INFO      1
 #define	DEBUG_VERBOSE   2
 #define	DEBUG_MESSAGES  5
@@ -46,18 +47,13 @@
 #include <linux/device.h>
 #include <linux/errno.h>
 #include <linux/platform_device.h>
-
-#include <linux/init.h>
 #include <linux/types.h>
 #include <linux/input.h>
-#include <linux/module.h>
 #include <linux/random.h>
 #include <linux/major.h>
-#include <linux/proc_fs.h>
 #include <linux/sched.h>
 #include <linux/seq_file.h>
 #include <linux/poll.h>
-#include <linux/device.h>
 #include <linux/mutex.h>
 #include <linux/rcupdate.h>
 #include <linux/smp_lock.h>
@@ -226,6 +222,7 @@ struct multi_touch_info {
 	int16_t x;
 	int16_t y;
 	int8_t pressed;
+	int8_t mousemode;
 };
 
 static struct multi_touch_info mtouch_info[MXT_MAX_NUM_TOUCHES];
@@ -875,29 +872,61 @@ static void process_T9_message(struct mxt_data *mxt, u8 *message)
 			/*input_sync(input);*/
 
 			if (i == 0) {
-				if (mtouch_info[i].pressure >= 60 && mtouch_info[i].pressed == 0) {
+				if ((mtouch_info[i].pressure >= 65 || mtouch_info[0].mousemode == 0) && mtouch_info[i].pressed == 0) {
 				        input_report_key(input, BTN_TOUCH, 1);
 					mtouch_info[i].pressed = 1;
-					pr_info("[SGT-OtherOS] report_key: BTN_TOUCH %d (pressure: %d)",mtouch_info[i].pressed,mtouch_info[i].pressure);
+					#ifdef SGTDEBUG
+						pr_info("[SGT-OtherOS] report_key: BTN_TOUCH %d (pressure: %d)",mtouch_info[i].pressed,mtouch_info[i].pressure);
+					#endif
 				}
-				if (mtouch_info[i].pressure < 60 && mtouch_info[i].pressed == 1) {
+				if (mtouch_info[i].pressure == 0 && mtouch_info[i].pressed == 1) {
 				        input_report_key(input, BTN_TOUCH, 0);
 					mtouch_info[i].pressed = 0;
-					pr_info("[SGT-OtherOS] report_key: BTN_TOUCH %d (pressure: %d)",mtouch_info[i].pressed,mtouch_info[i].pressure);
+					#ifdef SGTDEBUG
+						pr_info("[SGT-OtherOS] report_key: BTN_TOUCH %d (pressure: %d)",mtouch_info[i].pressed,mtouch_info[i].pressure);
+					#endif
 				}
 				REPORT_ST(mtouch_info[i].x, mtouch_info[i].y, (int)mtouch_info[i].pressure);
 			}
 
-			if (i == 1) {
-				if (mtouch_info[i].pressure >= 0 && mtouch_info[i].pressed == 0 && mtouch_info[0].pressed == 0) {
+			if (i == 1 && mtouch_info[0].mousemode == 1) {
+				if (mtouch_info[i].pressure > 0 && mtouch_info[i].pressed == 0 && mtouch_info[0].pressed == 0) {
 				        input_report_key(input, BTN_2, 1);
 					mtouch_info[i].pressed = 1;
-					pr_info("[SGT-OtherOS] report_key: BTN_2 %d (pressure: %d)",mtouch_info[i].pressed,mtouch_info[i].pressure);
+					#ifdef SGTDEBUG
+						pr_info("[SGT-OtherOS] report_key: BTN_2 %d (pressure: %d)",mtouch_info[i].pressed,mtouch_info[i].pressure);
+					#endif
 				}
 				if (mtouch_info[i].pressure == 0 && mtouch_info[i].pressed == 1) {
 				        input_report_key(input, BTN_2, 0);
 					mtouch_info[i].pressed = 0;
-					pr_info("[SGT-OtherOS] report_key: BTN_2 %d (pressure: %d)",mtouch_info[i].pressed,mtouch_info[i].pressure);
+					#ifdef SGTDEBUG
+						pr_info("[SGT-OtherOS] report_key: BTN_2 %d (pressure: %d)",mtouch_info[i].pressed,mtouch_info[i].pressure);
+					#endif
+				}
+			}
+
+			if (i == 2) {
+				// 3 finger tap, toggles mouse emulation mode
+
+				if (mtouch_info[i].pressure > 0 && mtouch_info[i].pressed == 0) {
+					mtouch_info[i].pressed = 1;
+					if (mtouch_info[0].mousemode == 1) {
+						mtouch_info[0].mousemode = 0;
+						#ifdef SGTDEBUG
+							pr_info("[SGT-OtherOS] mousemode 0");
+						#endif
+					}
+					if (mtouch_info[0].mousemode == 0) {
+						mtouch_info[0].mousemode = 1;
+						#ifdef SGTDEBUG
+							pr_info("[SGT-OtherOS] mousemode 1");
+						#endif
+					}
+				}
+
+				if (mtouch_info[i].pressure == 0 && mtouch_info[i].pressed == 1) {
+					mtouch_info[i].pressed = 0;
 				}
 			}
 
@@ -2686,6 +2715,8 @@ retry_i2c:
 		"number of objects: %d\n",
 		mxt->device_info.num_objs
 	);
+
+	mtouch_info[0].mousemode = MOUSEMODE_DEFAULT;
 
 	return identified;
 }

@@ -58,3 +58,8 @@ obj-$(CONFIG_TOUCHSCREEN_W90X900)	+= w90p910_ts.o
 obj-$(CONFIG_TOUCHSCREEN_TPS6507X)	+= tps6507x-ts.o
 obj-$(CONFIG_TOUCHSCREEN_MXT1386)	+= atmel_mxt1386.o atmel_mxt1386_cfg.o
 obj-$(CONFIG_TOUCHSCREEN_MELFAS) += melfas_ts.o mcs8000_download.o mms100_ISC_download.o
+
+ifeq ($(CONFIG_SGT_DEBUG),y)
+EXTRA_CFLAGS =-DSGTDEBUG
+endif
+

@@ -10,6 +10,15 @@ menuconfig SGT_OTHEROS
 
 if SGT_OTHEROS
 
+config SGT_DEBUG
+	bool "SGT-OtherOS Debugging"
+	default n
+	---help---
+	  Toggles some of zefie's added kernel debugging, mainly dumps
+	  detailed information about hardware. You can safely disable
+	  this if you are not interested in development.
+
+
 source "sgt-otheros-extras/compcache-0.6.2/Kconfig"
 
 endif # SGT_OTHEROS

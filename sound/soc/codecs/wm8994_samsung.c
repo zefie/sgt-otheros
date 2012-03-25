@@ -1088,12 +1088,14 @@ static int configure_clock(struct snd_soc_codec *codec)
 				  NULL };
 
         int ret = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
-        if (ret)
-                pr_info("[SGT-OtherOS] helper command: %s exit code %u (0x%x)\n",
-                                argv[0], (ret >> 8) & 0xff, ret);
-        else
-                pr_info("[SGT-OtherOS] helper command: %s exit code %u (0x%x)\n",
-                                argv[0], (ret >> 8) & 0xff, ret);
+	#ifdef SGTDEBUG
+	        if (ret)
+	                pr_info("[SGT-OtherOS] helper command: %s exit code %u (0x%x)\n",
+	                                argv[0], (ret >> 8) & 0xff, ret);
+	        else
+	                pr_info("[SGT-OtherOS] helper command: %s exit code %u (0x%x)\n",
+	                                argv[0], (ret >> 8) & 0xff, ret);
+	#endif
 
         if (ret < 0) /* Ignore any ERRNOs we got. */
                 ret = 0;
